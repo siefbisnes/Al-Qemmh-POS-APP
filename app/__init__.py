@@ -1,12 +1,46 @@
 import os
 from flask import Flask, session
-from config import Config
+from config import Config, BUNDLE_DIR
 from app import db as db_module
 
 
 def create_app(config_class=Config):
-    app = Flask(__name__, static_folder="static", template_folder="templates")
+    # Explicitly pinned to BUNDLE_DIR (config.py's "wherever the bundled
+    # read-only files actually are" - _MEIPASS when frozen, the project
+    # folder in dev) rather than leaving Flask to guess static_folder/
+    # template_folder as paths *relative to this module's own __file__*.
+    #
+    # That implicit relative resolution is exactly the kind of thing
+    # that can differ between machines running the same frozen .exe:
+    # PyInstaller compiles this package's .py files into its internal
+    # archive (not extracted to real files on disk), so app/__init__.py's
+    # own __file__/root_path inside a frozen build is not guaranteed to
+    # land at the same real, listable directory that alqemma.spec's
+    # `datas` entries physically extracted app/static and app/templates
+    # into - it can happen to resolve correctly on one machine/PyInstaller
+    # version and not another, which matches "works on the machine we
+    # built and tested it on, looks unstyled with broken JS on a
+    # different fresh machine" exactly: Flask silently falls back to
+    # serving nothing for /static/... (or nothing at all) rather than
+    # erroring loudly, so CSS and JS just don't load with no obvious
+    # cause. Pinning these to BUNDLE_DIR removes that ambiguity entirely
+    # - the same absolute path config.py already uses correctly for
+    # SCHEMA_PATH.
+    static_folder = os.path.join(BUNDLE_DIR, "app", "static")
+    template_folder = os.path.join(BUNDLE_DIR, "app", "templates")
+
+    app = Flask(__name__, static_folder=static_folder, template_folder=template_folder)
     app.config.from_object(config_class)
+
+    # Diagnostic logging so a future "looks unstyled on this one machine"
+    # report is immediately answerable from launcher.log instead of being
+    # unreproducible - confirms exactly where Flask is looking for these
+    # files and whether they're actually there on THIS machine.
+    app.logger.info(f"static_folder = {static_folder} (exists: {os.path.isdir(static_folder)})")
+    app.logger.info(f"template_folder = {template_folder} (exists: {os.path.isdir(template_folder)})")
+    style_css_path = os.path.join(static_folder, "css", "style.css")
+    app.logger.info(f"style.css present: {os.path.isfile(style_css_path)} ({style_css_path})")
+
     db_module.init_app(app)
     db_module.init_db(app)
     register_blueprints(app)

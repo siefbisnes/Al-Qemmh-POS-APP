@@ -9,6 +9,16 @@ set SCRIPT_DIR=%~dp0
 set OUTPUT_DIR=%SCRIPT_DIR%Program
 set APP_EXE=%OUTPUT_DIR%\AlQemma.exe
 
+if not exist "%SCRIPT_DIR%vendor\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" (
+    echo.
+    echo ERROR: vendor\MicrosoftEdgeWebView2RuntimeInstallerX64.exe is missing.
+    echo Download the "Evergreen Standalone Installer, x64" from:
+    echo   https://developer.microsoft.com/microsoft-edge/webview2/
+    echo and save it at that path before building - see BUILD_EXE.md.
+    echo.
+    goto :error
+)
+
 if exist "%OUTPUT_DIR%" rmdir /s /q "%OUTPUT_DIR%"
 mkdir "%OUTPUT_DIR%"
 

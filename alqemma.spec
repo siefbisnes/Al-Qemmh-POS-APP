@@ -25,6 +25,13 @@ a = Analysis(
 
         # Database/schema
         ('schema.sql', '.'),
+
+        # Offline WebView2 Runtime installer - shop PCs run with no/
+        # restricted internet, so run.py's ensure_webview2_runtime()
+        # installs from this local file instead of downloading at
+        # launch. Must be downloaded once and placed here before
+        # building - see BUILD_EXE.md. build_exe.bat checks for it.
+        ('vendor/MicrosoftEdgeWebView2RuntimeInstallerX64.exe', 'vendor'),
     ],
 
     hiddenimports=[

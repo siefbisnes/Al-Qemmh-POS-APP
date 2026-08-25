@@ -45,6 +45,7 @@ import time
 import json
 import socket
 import logging
+import datetime
 import threading
 import subprocess
 import webbrowser
@@ -52,7 +53,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from config import Config
+from config import Config, BUNDLE_DIR
 
 try:
     import webview
@@ -109,6 +110,13 @@ TAILSCALE_API_TIMEOUT = 10       # seconds, per HTTP call to the Tailscale API
 TAILSCALE_API_RETRIES = 2        # extra attempts on transient failures (not on 4xx)
 TAILSCALE_API_RETRY_DELAY = 2    # seconds between retries
 TAILSCALE_POST_DELETE_SETTLE = 2  # seconds to wait before re-querying after a delete
+
+# How long a same-hostname candidate device must have been unseen before
+# it's treated as safely-dead rather than possibly-still-live. Repeatedly
+# re-imaging/rebuilding this app's target machine (e.g. during testing)
+# leaves behind one orphaned Tailscale node per rebuild, all self-
+# reporting the same hostname - see find_duplicate_device_via_api.
+TAILSCALE_STALE_LASTSEEN_SECONDS = 15 * 60  # 15 minutes
 
 # Background connectivity monitor (internet + Tailscale), independent of
 # the one-shot LAN/Tailscale-serve detection above - see
@@ -700,23 +708,47 @@ def list_tailnet_devices(token):
     return devices, None
 
 
+def _parse_tailscale_timestamp(value):
+    """Parses a Tailscale API timestamp (RFC3339, e.g.
+    '2026-08-23T11:09:28Z' or with fractional seconds) into a UTC
+    datetime. Returns None on anything unparseable rather than raising -
+    callers must treat that as "unknown, don't assume stale"."""
+    if not value:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+
+
 def find_duplicate_device_via_api(hostname, current_device, token):
-    """Returns (duplicate_device_or_None, error). Queries the Tailnet via
-    the API and applies every safety check from the project brief before
-    ever returning a candidate for deletion:
+    """Returns (duplicates_list, error). `duplicates_list` is always a
+    list (possibly empty) of devices that are safe to delete - never a
+    single ambiguous guess. Applies every safety check from the project
+    brief before including a device:
       - the current device's own identity must already be known (passed
         in, established from local `tailscale status`, never guessed)
       - a candidate must have a different device ID from the current one
       - a candidate must actually have the conflicting hostname
-      - if more than one other device matches, that's ambiguous - refuse
-    On any doubt this returns (None, error) rather than a candidate, so
-    the caller never deletes anything without an unambiguous match."""
+      - a candidate is only included if it hasn't been seen in the last
+        TAILSCALE_STALE_LASTSEEN_SECONDS (or has no lastSeen at all,
+        e.g. it never finished registering) - i.e. it's provably not the
+        thing actively holding the name right now
+    If ANY same-hostname candidate looks recently active (seen within
+    that window), or its lastSeen can't be parsed at all, this refuses
+    the WHOLE batch rather than guessing which ones are safe - it's only
+    confident in "these are all long-dead", never in "pick one of these
+    live-looking ones". This intentionally allows multiple dead orphans
+    at once: repeatedly re-imaging the target machine (e.g. testing)
+    leaves one dead node per rebuild, all self-reporting the same
+    hostname - deleting all of them is correct, not ambiguous, as long
+    as none of them looks alive."""
     if not current_device or not current_device.get("id"):
-        return None, "Current device identity is not established; refusing to look for duplicates."
+        return [], "Current device identity is not established; refusing to look for duplicates."
 
     devices, err = list_tailnet_devices(token)
     if err:
-        return None, err
+        return [], err
 
     target = hostname.strip().lower()
     current_id = current_device["id"]
@@ -731,15 +763,25 @@ def find_duplicate_device_via_api(hostname, current_device, token):
         candidates.append(dev)
 
     if not candidates:
-        return None, None
-    if len(candidates) > 1:
-        return None, f"Found {len(candidates)} other devices named {hostname}; resolve manually in the admin console."
+        return [], None
 
-    duplicate = candidates[0]
-    dup_id = duplicate.get("nodeId") or duplicate.get("id")
-    if not dup_id or dup_id == current_id:
-        return None, "Could not safely distinguish the duplicate device from the current device."
-    return duplicate, None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    live_looking = []
+    stale = []
+    for dev in candidates:
+        last_seen = _parse_tailscale_timestamp(dev.get("lastSeen"))
+        if last_seen is None or (now - last_seen).total_seconds() < TAILSCALE_STALE_LASTSEEN_SECONDS:
+            live_looking.append(dev)
+        else:
+            stale.append(dev)
+
+    if live_looking:
+        return [], (
+            f"Found {len(candidates)} other device(s) named {hostname}, "
+            f"{len(live_looking)} of which looks recently active; resolve manually in the admin console."
+        )
+
+    return stale, None
 
 
 def remove_tailscale_device_via_api(device_id, token):
@@ -1105,41 +1147,50 @@ def perform_tailscale_repair(hostname, log):
                 log("      No device removed.")
             else:
                 log("      Verifying device identity via the Tailscale API...")
-                duplicate, dup_err = find_duplicate_device_via_api(hostname, current_device, token)
+                duplicates, dup_err = find_duplicate_device_via_api(hostname, current_device, token)
                 if dup_err:
                     log(f"      [WARN] {dup_err}")
                     log("      No device removed - see the message above.")
-                elif duplicate is None:
+                elif not duplicates:
                     log("      [OK] API found no confirmed duplicate (conflict may have just cleared).")
                     conflict = None
                 else:
-                    dup_id = duplicate.get("nodeId") or duplicate.get("id")
-                    log(f"      Verifying device identity... confirmed this is NOT the current device (id={dup_id}).")
-                    log(f"      Removing stale conflicting device (id={dup_id}) because it conflicts with the required {hostname} identity...")
-                    removed_ok, remove_err = remove_tailscale_device_via_api(dup_id, token)
-                    if not removed_ok:
-                        log(f"      [FAILED] Could not remove the conflicting device: {remove_err}")
-                    else:
-                        log("      [OK] Device removed.")
+                    if len(duplicates) > 1:
+                        log(f"      Found {len(duplicates)} stale devices all using {hostname} (likely left over from previous rebuilds/reinstalls of this machine) - all confirmed not the current device and not recently active.")
+                    remaining_ids = []
+                    for duplicate in duplicates:
+                        dup_id = duplicate.get("nodeId") or duplicate.get("id")
+                        log(f"      Verifying device identity... confirmed this is NOT the current device (id={dup_id}).")
+                        log(f"      Removing stale conflicting device (id={dup_id}) because it conflicts with the required {hostname} identity...")
+                        removed_ok, remove_err = remove_tailscale_device_via_api(dup_id, token)
+                        if not removed_ok:
+                            log(f"      [FAILED] Could not remove the conflicting device: {remove_err}")
+                            remaining_ids.append(dup_id)
+                        else:
+                            log("      [OK] Device removed.")
 
-                        # Don't trust the delete alone - re-query and only
+                    if remaining_ids:
+                        log(f"      [WARN] {len(remaining_ids)} conflicting device(s) could not be removed - {hostname} may still conflict.")
+                    else:
+                        # Don't trust the deletes alone - re-query and only
                         # treat the name as free once the Tailnet itself
-                        # confirms the device is actually gone, retrying
-                        # the check once if it's still listed right away.
+                        # confirms every removed device is actually gone,
+                        # retrying once if any is still listed right away.
+                        removed_ids = {duplicate.get("nodeId") or duplicate.get("id") for duplicate in duplicates}
                         time.sleep(TAILSCALE_POST_DELETE_SETTLE)
                         devices_after, _ = list_tailnet_devices(token)
-                        still_listed = any(
-                            (d.get("nodeId") or d.get("id")) == dup_id for d in (devices_after or [])
-                        )
+                        still_listed = removed_ids & {
+                            (d.get("nodeId") or d.get("id")) for d in (devices_after or [])
+                        }
                         if still_listed:
                             log("      Still listed immediately after removal - waiting and re-checking...")
                             time.sleep(TAILSCALE_POST_DELETE_SETTLE)
                             devices_after, _ = list_tailnet_devices(token)
-                            still_listed = any(
-                                (d.get("nodeId") or d.get("id")) == dup_id for d in (devices_after or [])
-                            )
+                            still_listed = removed_ids & {
+                                (d.get("nodeId") or d.get("id")) for d in (devices_after or [])
+                            }
                         if still_listed:
-                            log(f"      [WARN] Device still listed after removal - {hostname} may still conflict.")
+                            log(f"      [WARN] {len(still_listed)} device(s) still listed after removal - {hostname} may still conflict.")
                         else:
                             log(f"      [OK] {hostname} is now free.")
                             conflict = None
@@ -2474,6 +2525,25 @@ WEBVIEW2_BOOTSTRAPPER_URL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 WEBVIEW2_DOWNLOAD_TIMEOUT = 20   # seconds
 WEBVIEW2_INSTALL_TIMEOUT = 90    # seconds
 
+# How long to keep polling for WebView2 to become ready after kicking off
+# an install attempt - covers both our own installer finishing its
+# background registration and Windows Update finishing its own install
+# of Edge/WebView2 concurrently on a freshly-imaged machine.
+WEBVIEW2_WAIT_TIMEOUT = 90       # seconds, total
+WEBVIEW2_POLL_INTERVAL = 3       # seconds between checks
+
+# Standalone/offline WebView2 Runtime installer, bundled into the exe via
+# alqemma.spec's datas entry (see BUILD_EXE.md for where to get this file).
+# Shop PCs run with no/restricted internet (see app/__init__.py's
+# register_no_cache_headers docstring - "runs entirely offline"), so the
+# online bootstrapper below reliably fails there and every launch falls
+# back to the unstyled MSHTML engine. This local installer needs no
+# network at all. It's tried first; the online bootstrapper stays as a
+# best-effort fallback for dev machines where the vendor file isn't present.
+WEBVIEW2_OFFLINE_INSTALLER_PATH = os.path.join(
+    BUNDLE_DIR, "vendor", "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+)
+
 
 def is_webview2_runtime_installed():
     """Checks the registry for the WebView2 Evergreen Runtime - the same
@@ -2515,24 +2585,30 @@ def _download_file(url, dest_path, timeout):
 
 
 def ensure_webview2_runtime(logger=None):
-    """Best-effort, silent, and never blocks startup on failure: if the
-    WebView2 Runtime is missing, downloads Microsoft's small (~1.5MB)
-    official Evergreen Bootstrapper and runs it with /silent /install -
-    no UI, no user interaction, typically finishes in a few seconds on a
-    normal connection.
+    """Best-effort, and never blocks startup forever: if the WebView2
+    Runtime isn't detected yet, kicks off a silent install (from the
+    bundled offline installer if present, else Microsoft's small online
+    bootstrapper) and then PATIENTLY POLLS for up to
+    WEBVIEW2_WAIT_TIMEOUT seconds rather than checking once.
 
-    Must run BEFORE webview.create_window()/webview.start() - pywebview
-    picks its rendering backend at start() time, so this is the last
-    point where fixing a missing WebView2 Runtime can still change which
-    engine actually gets used for this launch (not just the next one).
+    Why polling matters: on a freshly-imaged Windows 10 machine, Windows
+    Update is very often mid-install of Edge/WebView2 in the background
+    on first boot. A single check right after launch can see "not
+    installed" even though it finishes moments later - and that's too
+    late, because pywebview picks its rendering engine (EdgeChromium vs
+    the old MSHTML fallback) once, at webview.start() time. Missing that
+    window locks the app into MSHTML (no CSS support) for the whole
+    session even though WebView2 becomes available 10 seconds later.
+    Polling here, before any window is created, means we simply wait
+    for whichever install (ours or Windows Update's own) finishes first.
 
-    If this fails for any reason (no internet, a locked-down machine,
-    installer blocked, etc.) this just logs it and returns False - the
-    app still launches exactly as it does today (falling back to the old
-    mshtml/winforms engine), so a genuinely offline machine is no worse
-    off than before this function existed. A machine WITH internet gets
-    automatically fixed on first launch instead of looking permanently
-    broken."""
+    Must run BEFORE webview.create_window()/webview.start().
+
+    If WebView2 never becomes available within the timeout (no internet,
+    no bundled installer, a locked-down machine, etc.) this gives up,
+    logs it, and returns False - the app still launches, just with the
+    old mshtml/winforms fallback, same as if this function didn't exist.
+    """
     def log(message, level="info"):
         if logger is None:
             print(message)
@@ -2546,39 +2622,60 @@ def ensure_webview2_runtime(logger=None):
     if is_webview2_runtime_installed():
         return True
 
-    log("WebView2 Runtime not found - attempting a silent install (required for correct styling/CSS support).")
-    import tempfile
-    fd, bootstrapper_path = tempfile.mkstemp(suffix=".exe", prefix="MicrosoftEdgeWebview2Setup_")
-    os.close(fd)
+    log("WebView2 Runtime not detected yet - this is normal right after Windows Update on a fresh machine. Attempting install and waiting for it to become ready...")
+
     try:
-        if not _download_file(WEBVIEW2_BOOTSTRAPPER_URL, bootstrapper_path, timeout=WEBVIEW2_DOWNLOAD_TIMEOUT):
-            log("Could not download the WebView2 bootstrapper (no internet access?) - the app will still launch, but may render unstyled.", level="error")
-            return False
-
-        result = subprocess.run(
-            [bootstrapper_path, "/silent", "/install"],
-            capture_output=True, timeout=WEBVIEW2_INSTALL_TIMEOUT,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+        from plyer import notification
+        notification.notify(
+            title="AlQemma Store",
+            message="جاري تجهيز التطبيق لأول مرة، من فضلك انتظر...",
+            timeout=WEBVIEW2_WAIT_TIMEOUT,
         )
-        # 0 = success. 3010 = success, a reboot is recommended but not
-        # required - WebView2 itself is usable immediately either way.
-        if result.returncode not in (0, 3010):
-            log(f"WebView2 bootstrapper exited with code {result.returncode} - the app will still launch, but may render unstyled.", level="error")
-            return False
+    except Exception:
+        pass  # native toast is a nice-to-have, never worth blocking startup over
 
-        if is_webview2_runtime_installed():
-            log("WebView2 Runtime installed successfully.")
-            return True
-        log("WebView2 bootstrapper reported success but the runtime still isn't detected - continuing anyway.", level="error")
-        return False
-    except Exception as exc:
-        log(f"WebView2 Runtime install attempt failed: {exc} - the app will still launch, but may render unstyled.", level="error")
-        return False
-    finally:
+    if os.path.isfile(WEBVIEW2_OFFLINE_INSTALLER_PATH):
         try:
-            os.remove(bootstrapper_path)
-        except OSError:
-            pass
+            subprocess.run(
+                [WEBVIEW2_OFFLINE_INSTALLER_PATH, "/silent", "/install"],
+                capture_output=True, timeout=WEBVIEW2_INSTALL_TIMEOUT,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except Exception as exc:
+            log(f"Bundled WebView2 installer did not complete cleanly: {exc} (continuing to wait - it may still finish, or Windows Update may install it independently).", level="error")
+    else:
+        # No bundled installer present (dev machine, or the vendor file
+        # wasn't added before building - see BUILD_EXE.md). Best-effort
+        # online fallback; fine if it fails, the poll loop below still
+        # catches Windows Update finishing on its own.
+        import tempfile
+        fd, bootstrapper_path = tempfile.mkstemp(suffix=".exe", prefix="MicrosoftEdgeWebview2Setup_")
+        os.close(fd)
+        try:
+            if _download_file(WEBVIEW2_BOOTSTRAPPER_URL, bootstrapper_path, timeout=WEBVIEW2_DOWNLOAD_TIMEOUT):
+                subprocess.run(
+                    [bootstrapper_path, "/silent", "/install"],
+                    capture_output=True, timeout=WEBVIEW2_INSTALL_TIMEOUT,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+        except Exception as exc:
+            log(f"Online WebView2 bootstrapper did not complete cleanly: {exc} (continuing to wait).", level="error")
+        finally:
+            try:
+                os.remove(bootstrapper_path)
+            except OSError:
+                pass
+
+    waited = 0
+    while waited < WEBVIEW2_WAIT_TIMEOUT:
+        if is_webview2_runtime_installed():
+            log(f"WebView2 Runtime became ready after {waited}s.")
+            return True
+        time.sleep(WEBVIEW2_POLL_INTERVAL)
+        waited += WEBVIEW2_POLL_INTERVAL
+
+    log(f"WebView2 Runtime still not detected after waiting {WEBVIEW2_WAIT_TIMEOUT}s - continuing anyway. The app will launch, but may render unstyled until WebView2 becomes available on a future launch.", level="error")
+    return False
 
 
 def main():
