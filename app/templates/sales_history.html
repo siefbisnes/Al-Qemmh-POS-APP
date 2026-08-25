@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}سجل المبيعات — القمة{% endblock %}
+{% block content %}
+<div class="page-header"><h1>سجل المبيعات</h1></div>
+<form class="toolbar" method="get">
+  <div class="field" style="margin:0;"><label>بحث</label><input type="search" name="q" value="{{ search or '' }}" placeholder="ابحث برقم الإيصال أو اسم العميل أو المنتج أو المبلغ"></div>
+  <div class="field" style="margin:0;"><label>من</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+  <div class="field" style="margin:0;"><label>إلى</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+  <button type="submit" class="btn" style="align-self:flex-end;">تصفية</button>
+</form>
+{% if transactions %}
+<table class="data-table">
+  <tr>
+    <th>رقم الإيصال</th>
+    <th>العميل</th>
+    <th>نوع البيعه</th>
+    <th>التاريخ والوقت</th>
+    <th>الإجمالي</th>
+    <th>المدفوع</th>
+    <th>المتبقي</th>
+    <th>طريقة الدفع</th>
+    <th>إجراءات</th>
+  </tr>
+  {% for t in transactions %}
+    <tr>
+      <td data-label="رقم الإيصال"><a href="{{ url_for('sales.transaction_detail', transaction_id=t.transaction_id) }}">{{ t.receipt_number }}</a></td>
+      <td data-label="العميل">
+        {% if t.customer_id and t.customer_name %}
+          <a href="{{ url_for('customers.detail', customer_id=t.customer_id) }}">{{ t.customer_name }}</a>
+        {% else %}
+          {{ t.customer_name or '' }}
+        {% endif %}
+      </td>
+      <td data-label="نوع البيعه">
+        {% if t.order_id %}
+          <a href="{{ url_for('orders.detail', order_id=t.order_id) }}" class="badge badge-order">اوردر توصيل</a>
+        {% else %}
+          <span class="badge badge-sale">بيع عادي</span>
+        {% endif %}
+      </td>
+      <td data-label="التاريخ والوقت">{{ t.created_at[:16] }}</td>
+      <td data-label="الإجمالي">{{ t.total_amount|money }}</td>
+      <td data-label="المدفوع">{{ t.paid_amount|money }}</td>
+      <td data-label="المتبقي">
+        {% if t.remaining_amount > 0.009 %}
+          <span class="debt-pill debt-due">{{ t.remaining_amount|money }}</span>
+        {% else %}
+          <span class="debt-pill debt-paid">{{ t.remaining_amount|money }}</span>
+        {% endif %}
+      </td>
+      <td data-label="طريقة الدفع">
+        {% if t.payment_method == 'mixed' %}
+          مختلط
+        {% elif t.payment_method %}
+          {{ payment_labels.get(t.payment_method, t.payment_method) }}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td class="action-cell">
+        <form method="post" action="{{ url_for('sales.delete_transaction', transaction_id=t.transaction_id) }}"
+              onsubmit="return confirm('هل أنت متأكد من إرجاع هذا الإيصال بالكامل؟ سيتم إرجاع كل المنتجات فيه للمخزون، ولا يمكن التراجع عن هذا الإجراء.');">
+          <button type="submit" class="btn btn-sm btn-danger">إرجاع</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty-state"><h3>لا توجد إيصالات في هذه الفترة.</h3></div>
+{% endif %}
+{% endblock %}

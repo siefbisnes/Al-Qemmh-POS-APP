@@ -1,0 +1,668 @@
+{% extends "base.html" %}
+{% block title %}الإعدادات — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header"><h1>الإعدادات</h1></div>
+
+<div class="form-grid">
+  <div>
+    <div class="panel">
+      <h2>المظهر</h2>
+      <div class="toggle-pill-group" id="themeToggleGroup">
+        <input type="radio" name="theme" id="themeLight" value="light">
+        <label for="themeLight">فاتح</label>
+        <input type="radio" name="theme" id="themeDark" value="dark">
+        <label for="themeDark">داكن</label>
+      </div>
+      <p class="hint"></p>
+    </div>
+
+    <div class="panel">
+      <h2>الإعدادات العامة</h2>
+      <form method="post">
+        <div class="field">
+          <label>الضمان الافتراضي (أيام)</label>
+          <input type="number" name="default_warranty_days" min="0" value="{{ current.default_warranty_days }}">
+          <span class="hint"></span>
+        </div>
+        <div class="field">
+          <label>حد المخزون المنخفض (وحدات)</label>
+          <input type="number" name="low_stock_threshold" min="0" value="{{ current.low_stock_threshold }}">
+          <span class="hint"></span>
+        </div>
+        <button type="submit" class="btn btn-primary">حفظ الإعدادات</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>تغيير كلمة المرور</h2>
+      <div class="field">
+        <label>كلمة المرور القديمة</label>
+        <input type="password" id="oldPasswordInput">
+      </div>
+      <div class="field">
+        <label>كلمة المرور الجديدة</label>
+        <input type="password" id="newPasswordInput">
+      </div>
+      <div class="field">
+        <label>تأكيد كلمة المرور</label>
+        <input type="password" id="confirmPasswordInput">
+      </div>
+      <button type="button" class="btn" id="changePasswordButton">تغيير كلمة المرور</button>
+    </div>
+
+    <!-- ============================================================
+         Launch window size - desktop-app only, same visibility rule
+         as the panels in the right column.
+         ============================================================ -->
+    <div class="panel" id="windowSizePanel" hidden>
+      <h2>حجم نافذة التشغيل</h2>
+      <p class="subtitle">يُطبَّق في المرة القادمة التي تُشغّل فيها التطبيق، وليس فورًا على النافذة الحالية.</p>
+
+      <div class="field">
+        <label>العرض (بكسل)</label>
+        <input type="number" id="windowWidthInput" min="760" max="3840">
+      </div>
+      <div class="field">
+        <label>الارتفاع (بكسل)</label>
+        <input type="number" id="windowHeightInput" min="560" max="2160">
+      </div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:.5rem; font-weight:normal;">
+          <input type="checkbox" id="resizableCheckbox" style="width:auto;">
+          السماح بتغيير حجم النافذة
+        </label>
+        <span class="hint"></span>
+      </div>
+      <button type="button" class="btn" id="saveWindowSizeButton">حفظ حجم النافذة</button>
+    </div>
+  </div>
+
+  <div>
+    <!-- ============================================================
+         Website Access - only meaningful from inside the native
+         desktop window (window.pywebview.api). A device browsing in
+         over LAN/Tailscale won't have that bridge, so this whole
+         block hides itself and shows a short note instead.
+         ============================================================ -->
+    <div class="panel" id="websiteAccessPanel" hidden>
+      <h2>روابط الوصول للموقع</h2>
+      <p class="subtitle">شارك أحد هذه الروابط لفتح النظام من جهاز آخر.</p>
+
+      <div class="field">
+        <label>الرابط المحلي (هذا الجهاز)</label>
+        <div style="display:flex; gap:.5rem;">
+          <input type="text" id="localUrlInput" readonly style="flex:1;">
+          <button type="button" class="btn btn-sm" data-copy-target="localUrlInput">نسخ</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>رابط الشبكة المحلية (Wi-Fi)</label>
+        <div style="display:flex; gap:.5rem;">
+          <input type="text" id="lanUrlInput" readonly style="flex:1;">
+          <button type="button" class="btn btn-sm" data-copy-target="lanUrlInput">نسخ</button>
+        </div>
+        <span class="hint">لفتحه من جهاز آخر على نفس شبكة الواي فاي.</span>
+      </div>
+      <div class="field">
+        <label>الرابط العام (Tailscale)</label>
+        <div style="display:flex; gap:.5rem; align-items:center;">
+          <input type="text" id="publicUrlInput" readonly style="flex:1;">
+          <button type="button" class="btn btn-sm" data-copy-target="publicUrlInput">نسخ</button>
+          <button type="button" class="btn btn-sm" id="troubleshootTailscaleButton" hidden>حل المشكلة</button>
+        </div>
+        <span class="hint">يعمل فقط على الأجهزة المضافة إلى نفس tailnet Tailscale.</span>
+
+        <div style="display:flex; align-items:center; gap:.6rem; margin-top:.6rem;">
+          <span class="connectivity-dot" id="settingsTailscaleDot"></span>
+          <span id="settingsTailscaleStatusText" class="hint" style="margin:0;">جارٍ التحقق من حالة Tailscale...</span>
+        </div>
+        <span class="hint" id="troubleshootResultHint"></span>
+      </div>
+
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:.5rem; font-weight:normal;">
+          <input type="checkbox" id="openBrowserCheckbox" style="width:auto;">
+          فتح الموقع محليًا تلقائيًا عند تشغيل التطبيق
+        </label>
+        <span class="hint"></span>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         Terminal & Error Log Viewer - same visibility rule as above.
+         ============================================================ -->
+    <div class="panel" id="logViewerPanel" hidden>
+      <h2>سجل النظام</h2>
+      <button type="button" class="btn btn-sm" id="toggleLogButton">إظهار السجل</button>
+      <pre id="logBox" hidden style="margin-top:.75rem; max-height:280px; overflow:auto; background:#161616; color:#9CA3AF; padding:10px; border-radius:8px; font-family:Consolas,monospace; font-size:12px; white-space:pre-wrap; direction:ltr; text-align:left;"></pre>
+    </div>
+
+    <!-- ============================================================
+         Backup & Graceful Exit - same visibility rule as above.
+         ============================================================ -->
+    <div class="panel" id="backupExitPanel" hidden>
+      <h2>النسخ الاحتياطي عند الإغلاق والخروج</h2>
+
+      <button type="button" class="btn btn-danger" id="exitAppButton" style="margin-bottom:1rem;">إغلاق التطبيق</button>
+
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:.5rem; font-weight:normal;">
+          <input type="checkbox" id="autoBackupCheckbox" style="width:auto;">
+          حفظ ملفات النظام تلقائيًا قبل الإغلاق
+        </label>
+      </div>
+
+      <div class="field" id="backupDestRow" hidden>
+        <label>مسار النسخ الاحتياطي</label>
+        <input type="text" id="backupDestInput">
+        <span class="hint">يتم إنشاء مجلد نسخة جديد بالتاريخ والوقت داخل هذا المسار في كل مرة.</span>
+      </div>
+
+      <div style="margin-top:1rem;">
+        <h3>استيراد / استعادة نسخة احتياطية (instance)</h3>
+        <p class="hint">يستبدل قاعدة البيانات والصور والسجلات وأي ملفات أخرى داخل instance بمجلد آخر دفعة واحدة. هذا الإجراء لا يمكن التراجع عنه.</p>
+        <input type="file" id="restoreInstanceInput" webkitdirectory directory multiple hidden>
+        <button type="button" class="btn btn-danger" id="restoreInstanceButton">اختيار مجلد instance واستبدال البيانات</button>
+        <div id="restoreInstanceResult" style="margin-top:.5rem;"></div>
+      </div>
+      <hr style="margin:1.5rem 0; border:none; border-top:1px solid var(--border);">
+      <div style="margin-top:1rem;">
+        <h3>استيراد فئة المنتجات</h3>
+        <div class="field">
+          <label>اختر الفئة</label>
+          <select id="exportCategorySelect" style="width:100%;">
+            <option value="">-- اختر فئة --</option>
+            {% for cat in categories %}
+            <option value="{{ cat.id }}">{{ cat.name }}</option>
+            {% endfor %}
+                    <span class="hint">يقوم بتحميل ملف الTXT في DOWNLOADS النظام</span>
+          </select>
+        </div>
+        <button type="button" class="btn" id="exportCategoryButton">استيراد المنتجات إلى ملف TXT</button>
+        <div id="exportCategoryResult" style="margin-top:.5rem; color:#555;"></div>
+      </div>
+    </div>
+
+    <p class="subtitle" id="desktopOnlyNote" hidden>
+      روابط الوصول وحجم النافذة وسجل النظام والنسخ الاحتياطي عند الإغلاق متاحة فقط من داخل تطبيق سطح المكتب على هذا الجهاز.
+    </p>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Isolated in its own <script> tag on purpose, separate from the
+// pywebview-bridge script below: an exception anywhere in one script
+// tag does not stop a later <script> tag from running, so if
+// localStorage (or anything else here) misbehaves inside pywebview's
+// embedded WebKitGTK view, it can only ever break this theme toggle -
+// it can no longer take the desktop-panel logic down with it.
+(function () {
+  var lightRadio = document.getElementById("themeLight");
+  var darkRadio = document.getElementById("themeDark");
+  if (!lightRadio || !darkRadio) return;
+
+  function hasApi() {
+    return !!(window.pywebview && window.pywebview.api);
+  }
+
+  function writeSavedTheme(theme) {
+    try {
+      localStorage.setItem("theme", theme);
+    } catch (e) {
+      console.warn("localStorage unavailable:", e);
+    }
+    if (hasApi()) {
+      window.pywebview.api.save_theme(theme);
+    }
+  }
+
+  function applyTheme(theme, skipSave) {
+    if (theme === "dark") {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+    (theme === "dark" ? darkRadio : lightRadio).checked = true;
+    if (!skipSave) writeSavedTheme(theme);
+  }
+
+  function readLocalStorageTheme() {
+    try {
+      return localStorage.getItem("theme") === "dark" ? "dark" : "light";
+    } catch (e) {
+      return "light";
+    }
+  }
+
+  // Initial state: best-effort localStorage guess immediately (matches
+  // whatever base.html already applied), then correct it from AppAPI -
+  // the reliable source of truth inside pywebview - once available.
+  applyTheme(readLocalStorageTheme(), /* skipSave */ true);
+
+  function syncFromApi() {
+    window.pywebview.api.get_theme().then(function (theme) {
+      applyTheme(theme, /* skipSave */ true);
+    }).catch(function () {});
+  }
+
+  if (hasApi()) {
+    syncFromApi();
+  } else {
+    window.addEventListener("pywebviewready", syncFromApi, { once: true });
+    var attempts = 0;
+    var timer = setInterval(function () {
+      attempts++;
+      if (hasApi()) {
+        clearInterval(timer);
+        syncFromApi();
+      } else if (attempts > 40) {
+        clearInterval(timer);  // plain browser - localStorage guess stands
+      }
+    }, 250);
+  }
+
+  lightRadio.addEventListener("change", function () { applyTheme("light"); });
+  darkRadio.addEventListener("change", function () { applyTheme("dark"); });
+})();
+</script>
+
+<script>
+(function () {
+  var windowSizePanel = document.getElementById("windowSizePanel");
+  var websitePanel = document.getElementById("websiteAccessPanel");
+  var logPanel = document.getElementById("logViewerPanel");
+  var backupPanel = document.getElementById("backupExitPanel");
+  var desktopOnlyNote = document.getElementById("desktopOnlyNote");
+
+  function showDesktopOnlyNote() {
+    desktopOnlyNote.hidden = false;
+  }
+
+  function copyToClipboard(text) {
+    // Works across pywebview's different embedded-browser backends more
+    // reliably than navigator.clipboard alone, which can be locked down
+    // without an explicit permission prompt in some of them.
+    var temp = document.createElement("textarea");
+    temp.value = text;
+    temp.style.position = "fixed";
+    temp.style.opacity = "0";
+    document.body.appendChild(temp);
+    temp.select();
+    try {
+      document.execCommand("copy");
+    } catch (e) {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+      }
+    }
+    document.body.removeChild(temp);
+  }
+
+  document.querySelectorAll("[data-copy-target]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var input = document.getElementById(btn.getAttribute("data-copy-target"));
+      if (!input || !input.value) return;
+      copyToClipboard(input.value);
+      var original = btn.textContent;
+      btn.textContent = "تم النسخ";
+      setTimeout(function () { btn.textContent = original; }, 1200);
+    });
+  });
+
+  // ---- Generic "save text to a file the user picks" helper. Pure JS,
+  //      no dependency on window.pywebview - works in a plain browser
+  //      too, which is the whole point (moved out of run.py's native
+  //      Save dialog so this shows up even without pywebview). Only
+  //      ever resolves {ok:true} once the file has actually been
+  //      written - never before.
+  //        1. Inside pywebview: native Save dialog via the js_api
+  //           bridge (save_text_file) - reliable on every OS pywebview
+  //           runs on.
+  //        2. Plain browser with File System Access API support
+  //           (Chrome/Edge): showSaveFilePicker() asks where to save,
+  //           then we await the write - genuinely confirmed on disk.
+  //        3. Older/other browsers (no picker API): falls back to a
+  //           Blob + <a download> - the browser's own download prompt
+  //           is the closest thing to "ask where" it offers; success is
+  //           reported right after handing it off, matching what the
+  //           browser itself shows the user. ----
+  function saveTextFile(filename, content) {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_text_file) {
+      return window.pywebview.api.save_text_file(filename, content);
+    }
+
+    if (window.showSaveFilePicker) {
+      return (async function () {
+        try {
+          var handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description: "Text files", accept: { "text/plain": [".txt"] } }]
+          });
+          var writable = await handle.createWritable();
+          await writable.write(content);
+          await writable.close();
+          return { ok: true, message: "تم الحفظ." };
+        } catch (err) {
+          if (err && err.name === "AbortError") return { ok: false, message: "تم الإلغاء." };
+          console.error(err);
+          return { ok: false, message: "فشل حفظ الملف." };
+        }
+      })();
+    }
+
+    try {
+      var blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return Promise.resolve({ ok: true, message: "تم تحميل الملف." });
+    } catch (err) {
+      console.error(err);
+      return Promise.resolve({ ok: false, message: "فشل تحميل الملف." });
+    }
+  }
+
+  // ---- Category export to TXT - fetches JSON from the server, builds
+  //      the text client-side, then hands it to saveTextFile() above so
+  //      it works the same whether pywebview is present or not, and
+  //      never claims success before the file is actually saved. ----
+  var exportCategorySelect = document.getElementById("exportCategorySelect");
+  var exportCategoryButton = document.getElementById("exportCategoryButton");
+  var exportCategoryResult = document.getElementById("exportCategoryResult");
+  if (exportCategoryButton && exportCategorySelect) {
+    exportCategoryButton.addEventListener("click", function () {
+      var categoryId = exportCategorySelect.value;
+      if (!categoryId) {
+        exportCategoryResult.textContent = "الرجاء اختيار فئة أولاً.";
+        return;
+      }
+      var categoryName = exportCategorySelect.options[exportCategorySelect.selectedIndex].textContent.trim();
+
+      exportCategoryButton.disabled = true;
+      exportCategoryResult.textContent = "جارٍ إعداد الملف...";
+
+      fetch("/settings/export-category-data?category_id=" + encodeURIComponent(categoryId))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.ok) {
+            exportCategoryButton.disabled = false;
+            exportCategoryResult.textContent = data.message || "فشل تحميل المنتجات.";
+            return;
+          }
+          var lines = data.items.map(function (item) {
+            return item.name + " " + item.price + "EGP";
+          });
+          var content = lines.join("\n");
+          var safeName = categoryName.replace(/[^\w\- ]+/g, "").trim() || "products";
+
+          return Promise.resolve(saveTextFile(safeName + ".txt", content)).then(function (result) {
+            exportCategoryButton.disabled = false;
+            exportCategoryResult.textContent = result.message;
+          });
+        })
+        .catch(function (err) {
+          exportCategoryButton.disabled = false;
+          exportCategoryResult.textContent = "خطأ في الاتصال بالخادم.";
+          console.error(err);
+        });
+    });
+  }
+
+  // ---- Full instance/ folder restore. Replaces the db, photos, logs -
+  //      everything in instance/ - with a picked "instance" folder,
+  //      instead of the old db-only upload.
+  //        - Inside pywebview: native folder-select dialog + a direct
+  //          local filesystem copy (restore_instance_from_folder) - no
+  //          upload needed, Python already has the file system.
+  //        - Plain browser: <input webkitdirectory> lets the user pick
+  //          a folder, then every file in it (with its relative path)
+  //          is uploaded to /settings/restore-instance, which rebuilds
+  //          instance/ from them. ----
+  var restoreInstanceButton = document.getElementById("restoreInstanceButton");
+  var restoreInstanceInput = document.getElementById("restoreInstanceInput");
+  var restoreInstanceResult = document.getElementById("restoreInstanceResult");
+  if (restoreInstanceButton && restoreInstanceInput) {
+    restoreInstanceButton.addEventListener("click", function () {
+      if (!confirm("سيتم استبدال كل بيانات النظام الحالية (قاعدة البيانات، الصور، السجلات) بشكل نهائي. هل تريد المتابعة؟")) {
+        return;
+      }
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.restore_instance_from_folder) {
+        restoreInstanceButton.disabled = true;
+        restoreInstanceResult.textContent = "جارٍ الاستبدال...";
+        window.pywebview.api.restore_instance_from_folder().then(function (result) {
+          restoreInstanceButton.disabled = false;
+          restoreInstanceResult.textContent = result.message;
+        });
+        return;
+      }
+      restoreInstanceInput.click();
+    });
+
+    restoreInstanceInput.addEventListener("change", function () {
+      var files = restoreInstanceInput.files;
+      if (!files || !files.length) return;
+
+      var formData = new FormData();
+      for (var i = 0; i < files.length; i++) {
+        formData.append("instance_files", files[i]);
+        formData.append("instance_paths", files[i].webkitRelativePath || files[i].name);
+      }
+
+      restoreInstanceButton.disabled = true;
+      restoreInstanceResult.textContent = "جارٍ رفع الملفات واستبدال البيانات...";
+
+      fetch("/settings/restore-instance", { method: "POST", credentials: "same-origin", body: formData })
+        .then(function (res) { return res.json().then(function (json) { return { ok: res.ok, json: json }; }); })
+        .then(function (r) {
+          restoreInstanceButton.disabled = false;
+          restoreInstanceResult.textContent = r.json.message;
+          restoreInstanceInput.value = "";
+        })
+        .catch(function (err) {
+          restoreInstanceButton.disabled = false;
+          restoreInstanceResult.textContent = "خطأ في الاتصال بالخادم.";
+          restoreInstanceInput.value = "";
+          console.error(err);
+        });
+    });
+  }
+
+  function initDesktopFeatures() {
+    var api = window.pywebview.api;
+
+    var autoBackupCheckbox = document.getElementById("autoBackupCheckbox");
+    var backupDestRow = document.getElementById("backupDestRow");
+    var backupDestInput = document.getElementById("backupDestInput");
+    var widthInput = document.getElementById("windowWidthInput");
+    var heightInput = document.getElementById("windowHeightInput");
+    var resizableCheckbox = document.getElementById("resizableCheckbox");
+    var openBrowserCheckbox = document.getElementById("openBrowserCheckbox");
+
+    // Ensure desktop-only panels are visible inside the desktop app
+    if (typeof windowSizePanel !== 'undefined') windowSizePanel.hidden = false;
+    if (typeof websitePanel !== 'undefined') websitePanel.hidden = false;
+    if (typeof logPanel !== 'undefined') logPanel.hidden = false;
+    if (typeof backupPanel !== 'undefined') backupPanel.hidden = false;
+    if (typeof desktopOnlyNote !== 'undefined') desktopOnlyNote.hidden = true;
+
+    api.get_settings_data().then(function (data) {
+      document.getElementById("localUrlInput").value = data.local_url || "—";
+      document.getElementById("lanUrlInput").value = data.lan_url || "غير متاح";
+      document.getElementById("publicUrlInput").value = data.public_url || "غير متاح";
+      openBrowserCheckbox.checked = !!data.open_browser;
+
+      autoBackupCheckbox.checked = !!data.auto_backup_on_close;
+      backupDestInput.value = data.backup_destination || "";
+      backupDestRow.hidden = !autoBackupCheckbox.checked;
+
+      widthInput.value = data.window_width;
+      heightInput.value = data.window_height;
+      resizableCheckbox.checked = !!data.resizable;
+    });
+
+    // ---- Website Access: Tailscale status/link ----
+    // Dot/status-text/troubleshoot-button behavior is handled globally by
+    // window.setConnectivityStatus in base.html (also drives the navbar
+    // dot) - it already guards for these element ids and updates them.
+    // The only thing that lived here was wiring the button's click.
+    var troubleshootBtn = document.getElementById("troubleshootTailscaleButton");
+    var troubleshootHint = document.getElementById("troubleshootResultHint");
+    if (troubleshootBtn) {
+      troubleshootBtn.addEventListener("click", function () {
+        troubleshootBtn.disabled = true;
+        troubleshootHint.textContent = "جارٍ فتح نافذة الطرفية...";
+        api.troubleshoot_tailscale()
+          .then(function (res) {
+            troubleshootHint.textContent = res.message || "";
+          })
+          .catch(function (err) {
+            troubleshootHint.textContent = "حدث خطأ أثناء فتح نافذة الطرفية.";
+            console.error(err);
+          })
+          .finally(function () {
+            troubleshootBtn.disabled = false;
+          });
+      });
+    }
+
+    function persistBackupSettings() {
+      api.save_settings(autoBackupCheckbox.checked, backupDestInput.value.trim(), openBrowserCheckbox.checked);
+    }
+
+    autoBackupCheckbox.addEventListener("change", function () {
+      backupDestRow.hidden = !autoBackupCheckbox.checked;
+      persistBackupSettings();
+    });
+    backupDestInput.addEventListener("change", persistBackupSettings);
+    openBrowserCheckbox.addEventListener("change", persistBackupSettings);
+
+    // ---- Launch window size ----
+    document.getElementById("saveWindowSizeButton").addEventListener("click", function () {
+      var button = document.getElementById("saveWindowSizeButton");
+      api.save_window_settings(widthInput.value, heightInput.value, resizableCheckbox.checked).then(function (result) {
+        widthInput.value = result.width;
+        heightInput.value = result.height;
+        var original = button.textContent;
+        button.textContent = "تم الحفظ";
+        setTimeout(function () { button.textContent = original; }, 1200);
+      });
+    });
+
+    // ---- Backup & Exit ----
+    document.getElementById("exitAppButton").addEventListener("click", function () {
+      if (!confirm("هل تريد بالتأكيد إغلاق التطبيق؟")) return;
+      var button = document.getElementById("exitAppButton");
+      button.disabled = true;
+      button.textContent = "جارٍ الإغلاق...";
+      api.exit_application();
+    });
+
+    // ---- Terminal & Error Log Viewer ----
+    var toggleButton = document.getElementById("toggleLogButton");
+    var logBox = document.getElementById("logBox");
+    var pollTimer = null;
+
+    function refreshLogs() {
+      api.fetch_logs().then(function (text) {
+        logBox.textContent = text;
+        logBox.scrollTop = logBox.scrollHeight;
+      });
+    }
+
+    toggleButton.addEventListener("click", function () {
+      var showing = !logBox.hidden;
+      if (showing) {
+        logBox.hidden = true;
+        toggleButton.textContent = "إظهار السجل";
+        clearInterval(pollTimer);
+        pollTimer = null;
+      } else {
+        logBox.hidden = false;
+        toggleButton.textContent = "إخفاء السجل";
+        refreshLogs();
+        pollTimer = setInterval(refreshLogs, 2000);
+      }
+    });
+  }
+
+  var alreadyInitialized = false;
+  function tryInit() {
+    if (alreadyInitialized) return true;
+    if (window.pywebview && window.pywebview.api) {
+      alreadyInitialized = true;
+      console.log("[Al-Qemma] window.pywebview.api detected - showing desktop panels.");
+      try {
+        initDesktopFeatures();
+      } catch (e) {
+        console.error("[Al-Qemma] initDesktopFeatures() threw:", e);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  if (!tryInit()) {
+    console.log("[Al-Qemma] window.pywebview.api not yet available, polling...");
+    window.addEventListener("pywebviewready", tryInit, { once: true });
+
+    // Belt-and-suspenders: some pywebview versions/backends don't
+    // reliably fire pywebviewready after a programmatic window.load_url()
+    // navigation (as opposed to the window's very first page load), so
+    // this polls directly instead of depending on that event alone.
+    var attempts = 0;
+    var pollTimer = setInterval(function () {
+      attempts++;
+      if (tryInit() || attempts > 40) {  // ~10s at 250ms
+        clearInterval(pollTimer);
+        if (!alreadyInitialized) {
+          console.warn("[Al-Qemma] window.pywebview.api never appeared after 10s - showing the desktop-only note instead.");
+          showDesktopOnlyNote();
+        }
+      }
+    }, 250);
+  }
+})();
+</script>
+
+<script>
+(function () {
+  var btn = document.getElementById('changePasswordButton');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var oldP = document.getElementById('oldPasswordInput').value || '';
+    var newP = document.getElementById('newPasswordInput').value || '';
+    var conf = document.getElementById('confirmPasswordInput').value || '';
+
+    fetch('/settings/change-password', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_password: oldP, new_password: newP, confirm_password: conf })
+    }).then(function (res) {
+      return res.json().then(function (json) { return { ok: res.ok, status: res.status, json: json }; });
+    }).then(function (r) {
+      if (r.ok) {
+        alert(r.json.message || 'تم تغيير كلمة المرور بنجاح');
+        document.getElementById('oldPasswordInput').value = '';
+        document.getElementById('newPasswordInput').value = '';
+        document.getElementById('confirmPasswordInput').value = '';
+      } else {
+        alert(r.json.message || 'فشل تغيير كلمة المرور');
+      }
+    }).catch(function (e) {
+      console.error('Change password request failed', e);
+      alert('خطأ في الاتصال بالخادم');
+    });
+  });
+})();
+</script>
+{% endblock %}

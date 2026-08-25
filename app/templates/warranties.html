@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}الضمان — القمة{% endblock %}
+{% block content %}
+<div class="page-header"><h1>الضمان</h1></div>
+
+<form class="toolbar" method="get">
+  <div class="field" style="margin:0; flex:1 1 240px;">
+    <label>بحث</label>
+    <input type="text" name="q" value="{{ search }}" placeholder="ابحث بالريسيبت او اسم المنتج">
+  </div>
+  <div class="field" style="margin:0;"><label>من</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+  <div class="field" style="margin:0;"><label>إلى</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+  <button type="submit" class="btn" style="align-self:flex-end;">تطبيق</button>
+  {% if search or date_from or date_to %}
+  <a href="{{ url_for('warranties.index') }}" class="btn btn-sm" style="align-self:flex-end;">مسح التصفية</a>
+  {% endif %}
+</form>
+
+<div class="form-grid">
+  <div>
+    <h2>نشط ({{ active|length }})</h2>
+    {% if active %}
+    <table class="data-table">
+      <tr><th>رقم الفاتورة</th><th>المنتج</th><th>تم البيع</th><th>ينتهي</th><th>العميل</th><th>الهاتف</th><th>إجراءات</th></tr>
+      {% for w in active %}
+        <tr>
+          <td>{{ w.receipt_number or '—' }}</td>
+          <td><a href="{{ url_for('products.detail', product_id=w.product_id) }}">{{ w.product_name }}</a></td>
+          <td>{{ w.sale_date[:10] }}</td>
+          <td>{{ w.expiration_date[:10] }}</td>
+          <td>{{ w.customer_name or '—' }}</td>
+          <td>{{ w.customer_phone or '—' }}</td>
+          <td class="action-cell">
+            <form method="post" action="{{ url_for('warranties.delete', warranty_id=w.id) }}"
+                  onsubmit="return confirm('هل أنت متأكد من حذف هذا الضمان؟ لن يتم حذف أي شيء آخر (البيع سيبقى كما هو).');">
+              <button type="submit" class="btn btn-sm btn-danger">حذف</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+      <p class="subtitle">لا يوجد ضمانات نشطة.</p>
+    {% endif %}
+  </div>
+  <div>
+    <h2>منتهي ({{ expired|length }})</h2>
+    {% if expired %}
+    <table class="data-table">
+      <tr><th>رقم الفاتورة</th><th>المنتج</th><th>تم البيع</th><th>انتهى</th><th>العميل</th><th>الهاتف</th><th>إجراءات</th></tr>
+      {% for w in expired %}
+        <tr>
+          <td>{{ w.receipt_number or '—' }}</td>
+          <td><a href="{{ url_for('products.detail', product_id=w.product_id) }}">{{ w.product_name }}</a></td>
+          <td>{{ w.sale_date[:10] }}</td>
+          <td>{{ w.expiration_date[:10] }}</td>
+          <td>{{ w.customer_name or '—' }}</td>
+          <td>{{ w.customer_phone or '—' }}</td>
+          <td class="action-cell">
+            <form method="post" action="{{ url_for('warranties.delete', warranty_id=w.id) }}"
+                  onsubmit="return confirm('هل أنت متأكد من حذف هذا الضمان؟ لن يتم حذف أي شيء آخر (البيع سيبقى كما هو).');">
+              <button type="submit" class="btn btn-sm btn-danger">حذف</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+      <p class="subtitle">لا يوجد ضمانات منتهية.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

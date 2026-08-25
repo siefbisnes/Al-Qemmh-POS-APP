@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}تفاصيل الاوردر — القمة{% endblock %}
+{% block content %}
+{% set txn = order.transaction %}
+<div class="page-header">
+  <h1>اوردر #{{ order.receipt_number }}</h1>
+  <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
+    <a href="{{ url_for('sales.transaction_detail', transaction_id=order.transaction_id) }}" class="btn btn-sm">عرض الفاتورة الأصلية</a>
+    <form method="post" action="{{ url_for('orders.delete', order_id=order.id) }}"
+          onsubmit="return confirm('حذف هذا الاوردر بالكامل كأنه لم يحدث؟ سيتم إرجاع الكميات للمخزون ولا يمكن التراجع.');">
+      <button type="submit" class="btn btn-sm btn-danger">حذف</button>
+    </form>
+    <button type="button" class="btn btn-sm btn-danger" id="openReturnModalBtn">ارجاع</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="returnOrderModal" hidden>
+  <div class="modal-box" style="max-width:480px; text-align:right;">
+    <h2 style="margin-top:0;">تأكيد إرجاع الاوردر</h2>
+    <p>سيؤدي هذا إلى:</p>
+    <ul style="padding-inline-start:1.2rem; line-height:1.9;">
+      <li>حذف الإيصال وكل المنتجات المرتبطة به نهائيًا</li>
+      <li>إرجاع كل الكميات إلى المخزون</li>
+      <li>حذف أي مبلغ تم تسجيله كمدفوع لهذا الاوردر</li>
+      <li>حذف هذا الاوردر من صفحة الطلبات وسجل المبيعات</li>
+    </ul>
+    {% if order.shipping_cost and order.shipping_cost > 0 %}
+    <p style="font-weight:600; margin-bottom:.4rem;">من يتحمل تكلفة الشحن ({{ order.shipping_cost|money }})؟</p>
+    <form method="post" action="{{ url_for('orders.return_order', order_id=order.id) }}" id="returnOrderForm">
+      <div class="payment-method-buttons" style="display:flex; flex-direction:column; gap:.5rem;">
+        <label class="payment-method-btn selected">
+          <input type="radio" name="shipping_cost_bearer" value="shop" checked>
+          تحمل تكلفة الشحن (سيتم الخصم من الاونلاين)
+        </label>
+        <label class="payment-method-btn">
+          <input type="radio" name="shipping_cost_bearer" value="customer">
+          تحمل العميل تكلفة الشحن
+        </label>
+      </div>
+      <div class="modal-actions" style="margin-top:1.25rem;">
+        <button type="button" class="btn" id="cancelReturnModalBtn">تراجع</button>
+        <button type="submit" class="btn btn-danger">تأكيد الإرجاع</button>
+      </div>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('orders.return_order', order_id=order.id) }}" id="returnOrderForm">
+      <div class="modal-actions" style="margin-top:1.25rem;">
+        <button type="button" class="btn" id="cancelReturnModalBtn">تراجع</button>
+        <button type="submit" class="btn btn-danger">تأكيد الإرجاع</button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">ملخص الطلب</h2>
+  <div class="form-grid">
+    <div class="field"><label>رقم الإيصال</label><div>{{ order.receipt_number }}</div></div>
+    <div class="field"><label>اسم العميل</label><div>{{ order.customer_name or '—' }}</div></div>
+    <div class="field"><label>رقم العميل</label><div>{{ order.customer_phone or '—' }}</div></div>
+    <div class="field"><label>إجمالي الطلب</label><div>{{ order.order_amount|money }}</div></div>
+    <div class="field"><label>الايام من تكوين هذه الاوردر</label><div>{{ order_age or '—' }}</div></div>
+  </div>
+  {% if txn %}
+  <table class="data-table" style="margin-top:1rem;">
+    <tr><th>المنتج/الخدمة</th><th>الكمية</th><th>السعر</th></tr>
+    {% for line in txn.lines %}
+      <tr><td>{{ line.product_name }}</td><td>{{ line.quantity }}</td><td>{{ line.selling_price|money }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">معلومات الشحن</h2>
+  <div class="form-grid">
+    <div class="field">
+      <label>شركة الشحن</label>
+      <div>{{ order.delivery_provider }}</div>
+    </div>
+    {% if order.shipping_cost and order.shipping_cost > 0 %}
+    <div class="field">
+      <label>تكلفة الشحن</label>
+      <div>
+        {{ order.shipping_cost|money }} — تم خصمها من {{ 'الدرج' if order.shipping_cost_source == 'drawer' else 'التحويلات الأونلاين' }}
+        {% if order.shipping_offset_purchase_id %}
+          <br>
+          <span class="subtitle">
+            وتم تحويل {{ order.shipping_cost|money }} مقابلها إلى {{ 'التحويلات الأونلاين' if order.shipping_cost_source == 'drawer' else 'الدرج' }} — لا تأثير على صافي الربح.
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- رقم البوصلة: purely informational, optional, editable at any time
+       regardless of delivery status - no validation, can be left blank. -->
+  <form method="post" action="{{ url_for('orders.tracking_number', order_id=order.id) }}" class="field" style="max-width:320px; margin-top:.75rem;">
+    <label>رقم البوصلة</label>
+    <div style="display:flex; gap:.5rem;">
+      <input type="text" name="tracking_number" value="{{ order.tracking_number or '' }}" placeholder="اختياري">
+      <button type="submit" class="btn btn-sm">حفظ</button>
+    </div>
+  </form>
+
+  {% set stage_order = ['preparing', 'shipping', 'delivered'] %}
+  {% set current_index = stage_order.index(order.status) if order.status in stage_order else -1 %}
+
+  <div class="delivery-progress" id="deliveryProgress" data-status="{{ order.status }}">
+    {% for stage, label in [('preparing', 'تجهيز الاوردر'), ('shipping', 'في الشحن'), ('delivered', 'وصل')] %}
+      {% set idx = loop.index0 %}
+      {% if loop.index0 > 0 %}
+        <div class="delivery-stage-connector {{ 'done' if idx <= current_index }}"></div>
+      {% endif %}
+      {% if order.status in ['not_delivered', 'cancelled'] %}
+        <div class="delivery-stage locked">{{ label }}</div>
+      {% else %}
+        <form method="post" action="{{ url_for('orders.advance', order_id=order.id) }}" style="flex:1 1 160px; min-width:140px;">
+          <input type="hidden" name="status" value="{{ stage }}">
+          <button type="submit"
+                  class="delivery-stage {{ 'done' if idx < current_index }} {{ 'active' if idx == current_index }} {{ 'clickable' if idx == current_index + 1 }} {{ 'locked' if idx > current_index + 1 }}"
+                  style="width:100%; border:2px solid var(--border); font:inherit;"
+                  {% if idx != current_index + 1 %}disabled{% endif %}>
+            <span class="check-icon">✓</span>{{ label }}
+          </button>
+        </form>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if order.status not in ['not_delivered', 'cancelled', 'delivered'] %}
+  <div class="delivery-terminal-actions">
+    <form method="post" action="{{ url_for('orders.not_delivered', order_id=order.id) }}"
+          onsubmit="return confirm('تأكيد أن الاوردر لم يصل؟');">
+      <button type="submit" class="btn btn-sm btn-danger">لم يصل</button>
+    </form>
+    <form method="post" action="{{ url_for('orders.cancel', order_id=order.id) }}"
+          onsubmit="return confirm('تأكيد إلغاء الاوردر؟');">
+      <button type="submit" class="btn btn-sm btn-danger">إلغاء الاوردر</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if order.status == 'not_delivered' %}
+    <p class="danger-text" style="margin-top:1rem;">تم تسجيل هذا الاوردر كـ لم يصل. لم يتم اعتماد أي مبلغ ماليًا.</p>
+  {% elif order.status == 'cancelled' %}
+    <p class="danger-text" style="margin-top:1rem;">تم إلغاء هذا الاوردر. لم يتم اعتماد أي مبلغ ماليًا.</p>
+  {% endif %}
+</div>
+
+<div class="panel transfer-panel {{ 'open' if order.status == 'delivered' }}" id="transferPanel">
+  <h2 style="margin-top:0;">طريقة تحويل فلوس الاوردر</h2>
+  {% if order.financially_completed_at %}
+    <p><strong>تم تسجيل الدفع بنجاح</strong> — طريقة الدفع: {{ payment_labels.get(order.payment_method, order.payment_method) }}</p>
+  {% else %}
+    <p class="subtitle">اختر طريقة استلام فلوس هذا الاوردر — لا يمكن اعتماد المبلغ ماليًا بدون اختيار طريقة.</p>
+    <form method="post" action="{{ url_for('orders.confirm_payment', order_id=order.id) }}" enctype="multipart/form-data" id="orderPaymentForm">
+      <div class="payment-method-buttons" style="display:flex; gap:.6rem; flex-wrap:wrap;">
+        {% for value, label in payment_methods %}
+          <label class="payment-method-btn">
+            <input type="radio" name="payment_method" value="{{ value }}" required> {{ label }}
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="field">
+        <label>صورة إثبات التحويل (اختياري)</label>
+        <input type="file" name="transfer_image" accept="image/*">
+      </div>
+      <button type="submit" class="btn btn-primary" id="confirmPaymentButton" disabled>تأكيد استلام الدفع واعتماد المبلغ ماليًا</button>
+    </form>
+  {% endif %}
+</div>
+
+{% if order.transfer_image_path %}
+<div class="panel">
+  <h2 style="margin-top:0;">صورة إثبات التحويل</h2>
+  <img src="{{ url_for('orders.transfer_image', order_id=order.id) }}"
+       alt="صورة إثبات التحويل" style="max-width:360px; width:100%; border-radius:10px; border:1px solid var(--border);">
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Purely cosmetic: re-trigger the reveal transition smoothly if the
+  // status changes via a full page reload rather than snapping instantly.
+  document.addEventListener("DOMContentLoaded", function () {
+    var panel = document.getElementById("transferPanel");
+    if (panel.classList.contains("open")) {
+      panel.style.maxHeight = panel.scrollHeight + "px";
+    }
+
+    // Spec §4: financial confirmation must stay disabled until the
+    // user explicitly picks a transaction/payment option - no default,
+    // no silent assumption.
+    var form = document.getElementById("orderPaymentForm");
+    if (form) {
+      var confirmBtn = document.getElementById("confirmPaymentButton");
+      form.querySelectorAll('input[name="payment_method"]').forEach(function (radio) {
+        radio.addEventListener("change", function () {
+          confirmBtn.disabled = false;
+          form.querySelectorAll(".payment-method-btn").forEach(function (label) {
+            label.classList.toggle("selected", label.querySelector("input").checked);
+          });
+        });
+      });
+    }
+
+    // ارجاع confirmation popup (shown only on the Orders page - Sales
+    // History's plain إرجاع button keeps working immediately with just
+    // a browser confirm(), no popup, per spec).
+    var openBtn = document.getElementById("openReturnModalBtn");
+    var modal = document.getElementById("returnOrderModal");
+    var cancelBtn = document.getElementById("cancelReturnModalBtn");
+    if (openBtn && modal) {
+      openBtn.addEventListener("click", function () { modal.hidden = false; });
+      cancelBtn.addEventListener("click", function () { modal.hidden = true; });
+      modal.querySelectorAll('input[name="shipping_cost_bearer"]').forEach(function (radio) {
+        radio.addEventListener("change", function () {
+          modal.querySelectorAll(".payment-method-btn").forEach(function (label) {
+            label.classList.toggle("selected", label.querySelector("input").checked);
+          });
+        });
+      });
+    }
+  });
+</script>
+{% endblock %}

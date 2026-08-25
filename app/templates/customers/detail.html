@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}تفاصيل العميل - Al-Qemma{% endblock %}
+{% block content %}
+
+<div class="page-header" dir="rtl">
+  <div>
+    <form id="customerEditForm" method="post" action="{{ url_for('customers.edit', customer_id=customer.id) }}" class="customer-edit-form">
+      <div class="customer-line">
+        <label>اسم العميل</label>
+        <input id="customerNameInput" type="text" name="name" value="{{ customer.customer_name }}" readonly>
+      </div>
+      <div class="customer-line">
+        <label>رقم الهاتف</label>
+        <input id="customerPhoneInput" type="text" name="phone" value="{{ customer.customer_phone }}" readonly>
+      </div>
+      <div class="customer-actions">
+        <button type="button" id="editCustomerButton" class="btn">تعديل</button>
+        <button type="submit" id="saveCustomerButton" class="btn btn-primary" style="display:none;">حفظ</button>
+        <button type="button" id="cancelCustomerEditButton" class="btn" style="display:none;">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="stat-grid" dir="rtl">
+  <div class="stat-card"><div class="label">آخر عملية شراء</div><div class="value">{{ customer.latest_purchase_date[:16] }}</div></div>
+  <div class="stat-card"><div class="label">آخر إجمالي</div><div class="value">{{ customer.last_purchase_total|money }}</div></div>
+  <div class="stat-card"><div class="label">إجمالي المدفوع</div><div class="value">{{ customer.total_paid|money }}</div></div>
+  <div class="stat-card"><div class="label">إجمالي المتبقي</div><div class="value">{{ customer.total_remaining|money }}</div></div>
+</div>
+
+<div class="panel" dir="rtl">
+  <h2>سجل المشتريات</h2>
+  {% if customer.history %}
+  <table class="data-table">
+    <tr>
+      <th>الإيصال</th>
+      <th>الكمية</th>
+      <th>التاريخ</th>
+      <th>الإجمالي</th>
+      <th>المدفوع</th>
+      <th>المتبقي</th>
+      <th>الإجراءات</th>
+    </tr>
+    {% for row in customer.history %}
+    <tr>
+      <td><a href="{{ url_for('customers.purchase_detail', transaction_id=row.transaction_id) }}">عرض الإيصال</a></td>
+      <td>{{ row.total_quantity }}</td>
+      <td>{{ row.created_at[:16] }}</td>
+      <td>{{ row.total_amount|money }}</td>
+      <td><span class="debt-pill debt-paid">{{ row.paid_amount|money }}</span></td>
+      <td><span class="debt-pill {{ 'debt-paid' if row.remaining_amount <= 0.009 else 'debt-due' }}">{{ row.remaining_amount|money }}</span></td>
+      <td class="action-cell">
+        <a class="btn btn-sm" href="{{ url_for('sales.transaction_detail', transaction_id=row.transaction_id) }}">الإيصال</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="subtitle">لا توجد مشتريات مسجلة لهذا العميل.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const editButton = document.getElementById('editCustomerButton');
+    const saveButton = document.getElementById('saveCustomerButton');
+    const cancelButton = document.getElementById('cancelCustomerEditButton');
+    const nameInput = document.getElementById('customerNameInput');
+    const phoneInput = document.getElementById('customerPhoneInput');
+    const form = document.getElementById('customerEditForm');
+
+    const originalName = nameInput.value;
+    const originalPhone = phoneInput.value;
+
+    function setEditing(editing) {
+      nameInput.readOnly = !editing;
+      phoneInput.readOnly = !editing;
+      editButton.style.display = editing ? 'none' : 'inline-flex';
+      saveButton.style.display = editing ? 'inline-flex' : 'none';
+      cancelButton.style.display = editing ? 'inline-flex' : 'none';
+      if (editing) {
+        nameInput.focus();
+      }
+    }
+
+    editButton.addEventListener('click', function () {
+      setEditing(true);
+    });
+
+    cancelButton.addEventListener('click', function () {
+      nameInput.value = originalName;
+      phoneInput.value = originalPhone;
+      setEditing(false);
+    });
+
+    form.addEventListener('submit', function () {
+      nameInput.readOnly = false;
+      phoneInput.readOnly = false;
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,25 @@
+.debt-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.debt-paid {
+  background: #e6f6ea;
+  color: #18753d;
+}
+
+.debt-due {
+  background: #ffe5e5;
+  color: #b42318;
+}
+
+.complete-box {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}

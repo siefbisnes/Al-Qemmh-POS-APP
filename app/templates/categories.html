@@ -1,0 +1,108 @@
+{% extends "base.html" %} {% block title %}الأقسام — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>الأقسام</h1>
+    <p class="subtitle"></p>
+  </div>
+  <a href="{{ url_for('categories.new') }}" class="btn btn-primary"
+    >+ قسم جديد</a
+  >
+</div>
+
+{% for c in categories %}
+<div class="panel">
+  <h2>
+    {{ c.name }} {% if c.is_builtin %}<span class="badge badge-muted"
+      >مدرج مسبقًا</span
+    >{% endif %}
+  </h2>
+  {% if c.fields %}
+  <table class="data-table">
+    <tr>
+      <th>الحقل</th>
+      <th>النوع</th>
+      <th>مطلوب</th>
+      <th>خيارات</th>
+      <th>إجراءات</th>
+    </tr>
+    {% for f in c.fields %}
+    <tr>
+      <td>
+        <input type="text" name="field_label" form="edit-field-{{ f.id }}" value="{{ f.field_label }}" />
+      </td>
+      <td>
+        <select name="field_type" form="edit-field-{{ f.id }}">
+          <option value="text" {% if f.field_type == 'text' %}selected{% endif %}>نص</option>
+          <option value="number" {% if f.field_type == 'number' %}selected{% endif %}>رقم</option>
+          <option value="textarea" {% if f.field_type == 'textarea' %}selected{% endif %}>نص طويل</option>
+          <option value="select" {% if f.field_type == 'select' %}selected{% endif %}>اختيار</option>
+          <option value="checkbox" {% if f.field_type == 'checkbox' %}selected{% endif %}>مربع اختيار</option>
+        </select>
+      </td>
+      <td style="text-align: center;">
+        <label style="display:inline-flex; align-items:center; gap:.35rem;">
+          <input type="checkbox" name="is_required" form="edit-field-{{ f.id }}" value="on" {% if f.is_required %}checked{% endif %} />
+        </label>
+      </td>
+      <td>
+        <input type="text" name="field_options" form="edit-field-{{ f.id }}" value="{{ f.field_options|join(', ') if f.field_options else '' }}" placeholder="أحمر, أزرق, أخضر" />
+      </td>
+      <td style="display:flex; align-items:center; gap:.4rem; flex-wrap: wrap; justify-content:flex-end;">
+        <button type="submit" form="edit-field-{{ f.id }}" class="btn btn-sm">حفظ</button>
+        <button type="submit" form="delete-field-{{ f.id }}" class="btn btn-sm btn-danger" onclick="return confirm('هل أنت متأكد من حذف هذا الحقل؟');">حذف</button>
+        <form id="edit-field-{{ f.id }}" method="post" action="{{ url_for('categories.update_field', category_id=c.id, field_id=f.id) }}" style="display:none;"></form>
+        <form id="delete-field-{{ f.id }}" method="post" action="{{ url_for('categories.delete_field', category_id=c.id, field_id=f.id) }}" style="display:none;"></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="subtitle">لا توجد حقول بعد.</p>
+  {% endif %}
+
+  <form
+    method="post"
+    action="{{ url_for('categories.add_field', category_id=c.id) }}"
+    class="toolbar"
+    style="margin-top: 0.9rem; flex-wrap: wrap; gap: .5rem;"
+  >
+    <input
+      type="text"
+      name="field_label"
+      placeholder="اسم الحقل الجديد، مثال: الواط"
+      required
+      style="min-width: 180px;"
+    />
+    <select name="field_type">
+      <option value="text">نص</option>
+      <option value="number">رقم</option>
+      <option value="textarea">نص طويل</option>
+      <option value="select">اختيار</option>
+      <option value="checkbox">مربع اختيار</option>
+    </select>
+    <input
+      type="text"
+      name="field_options"
+      placeholder="خيارات اختيار، مفصولة بفواصل"
+      style="min-width: 220px;"
+    />
+    <label
+      style="
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+      "
+    >
+      <input type="checkbox" name="is_required" style="width: auto" /> مطلوب
+    </label>
+    <button type="submit" class="btn btn-sm">إضافة حقل</button>
+  </form>
+  <form method="post" action="{{ url_for('categories.delete', category_id=c.id) }}" style="margin-top:.75rem;">
+    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('هل أنت متأكد من حذف هذا القسم وكل الحقول المرتبطة به؟');">حذف القسم</button>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

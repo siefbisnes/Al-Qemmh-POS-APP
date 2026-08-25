@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 100%; margin: 0; }
+      body {
+        font-family: "Tahoma", "Arial", "Segoe UI", sans-serif;
+        direction: rtl;
+        text-align: right;
+        padding: 14px 18px;
+        color: #1a1f2b;
+      }
+      h1 { text-align: center; margin: 0 0 2px; }
+      .sub { text-align: center; color: #5b6472; margin: 0 0 18px; font-size: 13px; }
+      .stat-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; width: 100%; }
+      .stat { flex: 1 1 30%; max-width: 32%; border: 1px solid #ccc; border-radius: 6px; padding: 8px 10px; }
+      .stat .label { font-size: 11px; color: #5b6472; }
+      .stat .value { font-size: 15px; font-weight: bold; word-break: break-word; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+      th, td { border: 1px solid #999; padding: 6px 8px; text-align: right; overflow-wrap: break-word; }
+      th { background: #f0f0f0; }
+      h2 { font-size: 14px; margin: 18px 0 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Al-Qemma</h1>
+    <p class="sub">تقرير اليوم — {{ report.date }}</p>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="label">أونلاين</div><div class="value">{{ report.payments.online|money }} ج.م</div></div>
+      <div class="stat"><div class="label">نقدي</div><div class="value">{{ report.payments.cash|money }} ج.م</div></div>
+      <div class="stat"><div class="label">المصروفات</div><div class="value">{{ report.expenses_total|money }} ج.م</div></div>
+      <div class="stat"><div class="label">الدرج (نقدي - مصروفات)</div><div class="value">{{ (report.payments.cash - report.expenses_total)|money }} ج.م</div></div>
+      <div class="stat"><div class="label">الوحدات المباعة</div><div class="value">{{ report.units_sold }}</div></div>
+    </div>
+
+    <h2>ماذا تم بيعه</h2>
+    {% if report.sold_summary %}
+    <table>
+      <tr>
+        <th>الصنف</th>
+        <th>الكمية</th>
+      </tr>
+      {% for item in report.sold_summary %}
+      <tr>
+        <td>{{ item.product_name }}</td>
+        <td>{{ item.quantity }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p>لا توجد مبيعات اليوم حتى الآن.</p>
+    {% endif %}
+  </body>
+</html>

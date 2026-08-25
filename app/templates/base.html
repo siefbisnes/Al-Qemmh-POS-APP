@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}{{ store_name }}{% endblock %}</title>
+<script>
+  (function () {
+    try {
+      if (localStorage.getItem("theme") === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    } catch (e) {}
+  })();
+</script>
+<script>
+  (function () {
+    function applyTheme(theme) {
+      if (theme === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+      } else {
+        document.documentElement.removeAttribute("data-theme");
+      }
+      try { localStorage.setItem("theme", theme); } catch (e) {}
+    }
+
+    function syncFromApi() {
+      window.pywebview.api.get_theme().then(applyTheme).catch(function () {});
+    }
+
+    if (window.pywebview && window.pywebview.api) {
+      syncFromApi();
+      return;
+    }
+    window.addEventListener("pywebviewready", syncFromApi, { once: true });
+
+    var attempts = 0;
+    var timer = setInterval(function () {
+      attempts++;
+      if (window.pywebview && window.pywebview.api) {
+        clearInterval(timer);
+        syncFromApi();
+      } else if (attempts > 40) {
+        clearInterval(timer);
+      }
+    }, 250);
+  })();
+</script>
+<script>
+  // In-app toast notifications - pushed from Python via
+  // window.evaluate_js(window.showAppToast(...)) any time notify_event()
+  // fires server-side (see app/routes/notifications.py). Deliberately
+  // separate from the native OS desktop notification (plyer) and web
+  // push - those still fire too; this is the in-window, theme-colored,
+  // sound-cued one. kind is "success" (green) or "warning" (red) -
+  // everything else, and only actual warnings, respectively.
+  (function () {
+    var audioCtx = null;
+    function playBlip(kind) {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = kind === "warning" ? 300 : 640;
+        gain.gain.value = 0.0001;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        var now = audioCtx.currentTime;
+        gain.gain.exponentialRampToValueAtTime(0.16, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        osc.start(now);
+        osc.stop(now + 0.24);
+      } catch (e) {}
+    }
+
+    window.showAppToast = function (kind, title, message) {
+      var stack = document.getElementById("appToastStack");
+      if (!stack) {
+        stack = document.createElement("div");
+        stack.id = "appToastStack";
+        stack.className = "app-toast-stack";
+        document.body.appendChild(stack);
+      }
+
+      var toast = document.createElement("div");
+      toast.className = "app-toast " + (kind === "warning" ? "app-toast-warning" : "app-toast-success");
+
+      var titleEl = document.createElement("strong");
+      titleEl.textContent = title || "";
+      toast.appendChild(titleEl);
+
+      if (message) {
+        var msgEl = document.createElement("span");
+        msgEl.textContent = message;
+        toast.appendChild(msgEl);
+      }
+
+      stack.appendChild(toast);
+      playBlip(kind);
+      requestAnimationFrame(function () { toast.classList.add("is-visible"); });
+
+      setTimeout(function () {
+        toast.classList.remove("is-visible");
+        setTimeout(function () { toast.remove(); }, 250);
+      }, 5000);
+    };
+  })();
+</script>
+<script>
+  // Connectivity status dot (sidebar footer, next to the SQLite version
+  // line). window.setConnectivityStatus is called from Python via
+  // window.evaluate_js every ~60s (see ServerController._connectivity_loop
+  // in run.py) - defined here, at global scope, so it exists by the time
+  // any such call arrives. Also fetched once immediately on load so the
+  // dot doesn't sit in its neutral "checking" state for up to a minute
+  // waiting on the first background tick.
+  (function () {
+    var STATUS_LABELS = {
+      tailscale: "متصل بـ Tailscale",
+      no_tailscale: "متصل - بدون Tailscale",
+      offline: "لا يوجد اتصال",
+      checking: "جارٍ التحقق...",
+    };
+
+    window.setConnectivityStatus = function (status, message, publicUrl) {
+      var dot = document.getElementById("connectivityDot");
+      var label = document.getElementById("connectivityLabel");
+      var wrap = document.getElementById("connectivityIndicator");
+      if (dot && label && wrap) {
+        dot.setAttribute("data-status", status);
+        label.textContent = STATUS_LABELS[status] || STATUS_LABELS.checking;
+        wrap.title = message || "";
+      }
+
+      // Settings page only: same status, plus the actual tailnet URL once
+      // it's known, plus a troubleshoot button that only makes sense to
+      // show once we actually know Tailscale isn't connected (not while
+      // still "checking"). Guarded with getElementById checks since these
+      // elements only exist on settings.html - this function is
+      // shared/global so it can be called from anywhere.
+      var settingsDot = document.getElementById("settingsTailscaleDot");
+      var settingsText = document.getElementById("settingsTailscaleStatusText");
+      var troubleshootBtn = document.getElementById("troubleshootTailscaleButton");
+      var publicUrlInput = document.getElementById("publicUrlInput");
+      if (settingsDot && settingsText) {
+        settingsDot.setAttribute("data-status", status);
+        settingsText.textContent = message || (STATUS_LABELS[status] || STATUS_LABELS.checking);
+      }
+      if (troubleshootBtn) {
+        troubleshootBtn.hidden = (status === "tailscale" || status === "checking");
+      }
+      if (publicUrlInput && typeof publicUrl !== "undefined") {
+        // Only overwrite once we actually have a fresh value to report -
+        // avoids blanking the field back to "غير متاح" on every tick
+        // before Tailscale has had a chance to be (re-)detected.
+        if (publicUrl) {
+          publicUrlInput.value = publicUrl;
+        } else if (status !== "tailscale") {
+          publicUrlInput.value = "غير متاح";
+        }
+      }
+    };
+
+    function fetchInitialStatus() {
+      if (!(window.pywebview && window.pywebview.api && window.pywebview.api.get_connectivity_status)) return;
+      window.pywebview.api.get_connectivity_status()
+        .then(function (result) {
+          if (result) window.setConnectivityStatus(result.status, result.message);
+        })
+        .catch(function () {});
+    }
+
+    if (window.pywebview && window.pywebview.api) {
+      fetchInitialStatus();
+    } else {
+      window.addEventListener("pywebviewready", fetchInitialStatus, { once: true });
+    }
+    // No polling fallback needed here beyond pywebviewready - unlike
+    // theme (which must be correct before first paint), a few seconds'
+    // delay before the dot's first update is fine, and the background
+    // monitor's own first tick will arrive shortly after regardless.
+  })();
+</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/customers.css') }}">
+<link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+<meta name="theme-color" content="#0b2f4f">
+
+<link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<style>
+  /* Connectivity status dot, next to the SQLite version line in the
+     sidebar footer. Kept scoped here rather than added to style.css
+     since it's a small, self-contained addition - avoids touching the
+     shared stylesheet for every other page. Colors are plain literals
+     (not the app's --accent) since they carry a fixed traffic-light
+     meaning (green/yellow/red) that shouldn't shift with the theme. */
+  .connectivity-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-inline-start: 8px;
+  }
+  .connectivity-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #9aa3af; /* neutral - "checking" default before the first result */
+    flex: 0 0 auto;
+  }
+  .connectivity-dot[data-status="tailscale"] { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+  .connectivity-dot[data-status="no_tailscale"] { background: #eab308; box-shadow: 0 0 4px #eab308; }
+  .connectivity-dot[data-status="offline"] { background: #ef4444; box-shadow: 0 0 4px #ef4444; }
+  .connectivity-label { font-size: .72rem; opacity: .85; }
+
+  /* In-app toast notifications (see window.showAppToast above). RTL-aware:
+     border-inline-start lands on the visual right in this app since
+     html/body are dir="rtl". */
+  .app-toast-stack {
+    position: fixed;
+    bottom: 1.25rem;
+    inset-inline-end: 1.25rem;
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    max-width: min(92vw, 360px);
+    pointer-events: none;
+  }
+  .app-toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-inline-start: 4px solid var(--accent);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-pop);
+    padding: .65rem .9rem;
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    color: var(--text);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .app-toast.is-visible { opacity: 1; transform: translateY(0); }
+  .app-toast strong { font-size: .88rem; }
+  .app-toast span { font-size: .8rem; color: var(--text-muted); }
+  .app-toast-success strong { color: var(--accent); }
+  .app-toast-warning { border-inline-start-color: var(--danger); }
+  .app-toast-warning strong { color: var(--danger); }
+</style>
+</head>
+<body dir="rtl">
+<div class="layout">
+
+  <aside class="sidebar" id="sidebar">
+    <a href="{{ url_for('branding.about') }}" class="brand">
+      <img class="brand-mark brand-mark-light" src="{{ url_for('static', filename='icons/logo-mark-light.png') }}" alt="القمة">
+      <img class="brand-mark brand-mark-dark" src="{{ url_for('static', filename='icons/logo-mark-dark.png') }}" alt="القمة" aria-hidden="true">
+      <div>
+        <div class="brand-name">القمة</div>
+        <div class="brand-tag">المخزون والمبيعات</div>
+      </div>
+    </a>
+
+    <div class="nav-pinned">
+      <a href="{{ url_for('reports.index') }}" class="pinned-tile {{ 'is-active' if request.endpoint and request.endpoint.startswith('reports.') }}">
+        <span class="pinned-emoji">📊</span>
+        <span class="pinned-label">لوحة التحكم</span>
+      </a>
+      <a href="{{ url_for('sales.new') }}" class="pinned-tile {{ 'is-active' if request.endpoint and request.endpoint.startswith('sales.new') }}">
+        <span class="pinned-emoji">💰</span>
+        <span class="pinned-label">البيع/اوردر</span>
+      </a>
+    </div>
+
+    <nav class="nav">
+      <details class="others-group" open>
+        <summary class="nav-label">أخرى</summary>
+        <div class="nav-tiles">
+          <a href="{{ url_for('dashboard.index') }}" class="nav-link tile {{ 'is-active' if request.endpoint == 'dashboard.index' }}">المنتجات</a>
+          <a href="{{ url_for('customers.index') }}" class="nav-link tile {{ 'is-active' if request.endpoint and request.endpoint.startswith('customers.') }}">العملاء</a>
+          <a href="{{ url_for('sales.history') }}" class="nav-link tile {{ 'is-active' if request.endpoint == 'sales.history' }}">سجل المبيعات</a>
+          <a href="{{ url_for('orders.index') }}" class="nav-link tile {{ 'is-active' if request.endpoint and request.endpoint.startswith('orders.') }}">الطلبات</a>
+          <a href="{{ url_for('warranties.index') }}" class="nav-link tile {{ 'is-active' if request.endpoint == 'warranties.index' }}">الضمان</a>
+          <a href="{{ url_for('expenses.index') }}" class="nav-link tile {{ 'is-active' if request.endpoint and request.endpoint.startswith('expenses.') }}">المصروفات والمشتريات</a>
+        </div>
+        <div class="nav-plain">
+          <a href="{{ url_for('categories.index') }}" class="nav-link {{ 'is-active' if request.endpoint and request.endpoint.startswith('categories.') }}">الأقسام</a>
+          <a href="{{ url_for('compatibility.search') }}" class="nav-link {{ 'is-active' if request.endpoint == 'compatibility.search' }}">بحث التوافق</a>
+          <a href="{{ url_for('settings.index') }}" class="nav-link {{ 'is-active' if request.endpoint and request.endpoint.startswith('settings.') }}">الإعدادات</a>
+        </div>
+      </details>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-main">
+        <span class="sidebar-footer-item">
+          <span class="connectivity-indicator" id="connectivityIndicator" title="جارٍ التحقق من الاتصال...">
+            <span class="connectivity-dot" id="connectivityDot"></span>
+            <span class="connectivity-label" id="connectivityLabel">جارٍ التحقق...</span>
+          </span>
+        </span>
+        <span class="sidebar-footer-separator">·</span>
+        <span class="sidebar-footer-item">SQLite</span>
+        <span class="sidebar-footer-separator">·</span>
+        <span class="sidebar-footer-item">النسخة 1.5 by Sief</span>
+      </div>
+      <div class="sidebar-footer-phone">01020889951</div>
+    </div>
+  </aside>
+
+  <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="فتح/إغلاق القائمة">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+  </button>
+
+  <main class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+        {% set error_messages = messages | selectattr("0", "equalto", "error") | map(attribute="1") | list %}
+        {% if error_messages %}
+          <script>
+            (function () {
+              var msgs = {{ error_messages | tojson }};
+              msgs.forEach(function (msg) {
+                window.showAppToast && window.showAppToast("warning", "تنبيه", msg);
+              });
+            })();
+          </script>
+        {% endif %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script>
+  const vapidPublicKey = "{{ config.VAPID_PUBLIC_KEY | e }}";
+  const serviceWorkerUrl = "{{ url_for('static', filename='sw.js') }}";
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  async function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) {
+      return null;
+    }
+    try {
+      const registration = await navigator.serviceWorker.register(serviceWorkerUrl, { scope: '/' });
+      return registration;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function subscribeToPush(registration) {
+    if (!registration || !('PushManager' in window)) {
+      return;
+    }
+    if (!vapidPublicKey) {
+      return;
+    }
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== 'granted') {
+      return;
+    }
+    try {
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+      });
+      await fetch('/push/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(subscription),
+      });
+    } catch (error) {}
+  }
+
+  window.addEventListener('load', async () => {
+    // The desktop shell (pywebview) is always talking straight to the
+    // local Flask server - it has no use for offline/PWA caching, and a
+    // service worker persisting across app restarts was masking real
+    // template/JS changes during development (edits looked "not applied"
+    // because the SW kept serving an old cached page). pywebview.api is
+    // injected asynchronously, so this waits briefly for it the same way
+    // transaction_detail.html's whenBridgeSettled() does, with a short
+    // timeout fallback for the plain-browser case (LAN/Tailscale access),
+    // where the service worker/push flow should still run normally.
+    function isDesktopShell() {
+      return !!(window.pywebview && window.pywebview.api);
+    }
+
+    let settled = false;
+    async function afterShellCheck() {
+      if (settled) return;
+      settled = true;
+      if ('serviceWorker' in navigator && isDesktopShell()) {
+        const existing = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(existing.map((reg) => reg.unregister()));
+        return; // no PWA install/push registration inside the desktop shell
+      }
+      const registration = await registerServiceWorker();
+      await subscribeToPush(registration);
+    }
+
+    if (isDesktopShell()) {
+      afterShellCheck();
+      return;
+    }
+    const fallbackTimer = setTimeout(afterShellCheck, 800);
+    window.addEventListener('pywebviewready', () => {
+      clearTimeout(fallbackTimer);
+      afterShellCheck();
+    }, { once: true });
+  });
+</script>
+<script>
+  // Backspace = go to the previous page, as a navigation convenience on
+  // top of (not instead of) the app's existing links/buttons. Works the
+  // same in a plain browser tab and inside the pywebview desktop shell,
+  // since both expose the standard History API - history.back() is not
+  // a pywebview-specific API.
+  //
+  // Must never fire while the person is actually editing text, or every
+  // "delete the last character" keystroke in a name/notes/quantity field
+  // (including the sale line's editable product-name field) would instead
+  // navigate them away from an in-progress sale. Guarded by:
+  //   1. Any <input>, <textarea>, <select>, or contenteditable element -
+  //      normal Backspace behavior (character deletion) is left alone.
+  //   2. history.state === null (no app history entry to go back to,
+  //      e.g. this is the first page in the session) - do nothing rather
+  //      than fall through to the browser's own default (which could
+  //      leave the app entirely).
+  (function () {
+    function isTextEditingTarget(el) {
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName;
+      if (tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (tag === "INPUT") {
+        // Only text-like input types actually consume Backspace as
+        // editing; checkboxes/radios/buttons/etc. don't, so Backspace on
+        // those should still navigate back like anywhere else non-editable.
+        const nonTextTypes = ["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"];
+        return !nonTextTypes.includes((el.type || "text").toLowerCase());
+      }
+      return false;
+    }
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Backspace") return;
+      if (isTextEditingTarget(e.target)) return; // let normal editing happen
+      if (e.defaultPrevented) return;
+
+      // No usable previous entry in this app's history - do nothing
+      // rather than risk navigating out of the app entirely.
+      if (window.history.length <= 1) return;
+
+      e.preventDefault();
+      window.history.back();
+    });
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

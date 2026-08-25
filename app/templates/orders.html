@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}الطلبات — القمة{% endblock %}
+{% block content %}
+<div class="page-header"><h1>الطلبات</h1></div>
+<form class="toolbar" method="get">
+  <div class="field" style="margin:0;">
+    <label>بحث</label>
+    <input type="search" name="q" value="{{ search or '' }}" placeholder="ابحث برقم الإيصال أو اسم العميل أو شركة الشحن">
+  </div>
+  <button type="submit" class="btn" style="align-self:flex-end;">تصفية</button>
+</form>
+
+{% if orders %}
+<table class="data-table">
+  <tr>
+    <th>رقم الإيصال</th>
+    <th>اسم العميل</th>
+    <th>رقم العميل</th>
+    <th>شحن خلال</th>
+    <th>رقم البوصلة</th>
+    <th>الإجمالي</th>
+    <th>الحالة</th>
+  </tr>
+  {% for o in orders %}
+    <tr class="order-row-{{ o.status }}">
+      <td data-label="رقم الإيصال"><a href="{{ url_for('sales.transaction_detail', transaction_id=o.transaction_id) }}">{{ o.receipt_number }}</a></td>
+      <td data-label="اسم العميل">{{ o.customer_name or '' }}</td>
+      <td data-label="رقم العميل">{{ o.customer_phone or '' }}</td>
+      <td data-label="شحن خلال">{{ o.delivery_provider }}</td>
+      <td data-label="رقم البوصلة">{{ o.tracking_number or '—' }}</td>
+      <td data-label="الإجمالي">{{ o.order_amount|money }}</td>
+      <td data-label="الحالة">
+        <a href="{{ url_for('orders.detail', order_id=o.id) }}" class="order-status-pill order-status-{{ o.status }}">
+          {{ o.status_label }}
+        </a>
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty-state"><h3>لا توجد طلبات توصيل بعد.</h3></div>
+{% endif %}
+{% endblock %}

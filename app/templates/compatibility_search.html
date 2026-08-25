@@ -1,0 +1,56 @@
+{% extends "base.html" %} {% block title %}بحث التوافق — القمة{%
+endblock %} {% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>بحث التوافق</h1>
+    <p class="subtitle"></p>
+  </div>
+</div>
+
+<form class="toolbar" method="get">
+  <input
+    type="text"
+    name="q"
+    placeholder="مثال: E5-1650 V3"
+    value="{{ term }}"
+    style="flex: 1; min-width: 240px"
+  />
+  <button type="submit" class="btn btn-primary">بحث</button>
+</form>
+
+{% if term %} {% if results %}
+<table class="data-table">
+  <tr>
+    <th>الجزء المتوافق</th>
+    <th>النوع</th>
+    <th>موجود في</th>
+    <th>الدرجة</th>
+    <th>المخزون</th>
+    <th></th>
+  </tr>
+  {% for r in results %}
+  <tr>
+    <td>{{ r.component_value }}</td>
+    <td>{{ r.component_type }}</td>
+    <td>
+      <a href="{{ url_for('products.detail', product_id=r.product_id) }}"
+        >{{ r.product_name }}</a
+      >
+    </td>
+    <td>
+      <span class="badge badge-grade-{{ r.grade|lower }}">{{ r.grade }}</span>
+    </td>
+    <td>{{ r.quantity }}</td>
+    <td>{{ r.notes or '' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty-state">
+  <h3>لا توجد نتائج لـ "{{ term }}".</h3>
+  <p>
+    هذا لا يعني أنه غير متوافق — ربما لم يُدخل بعد.
+  </p>
+</div>
+{% endif %} {% endif %} {% endblock %}

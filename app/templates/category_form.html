@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}قسم جديد — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header"><h1>قسم جديد</h1></div>
+
+<form method="post" class="panel">
+  <div class="field">
+    <label>اسم القسم</label>
+    <input type="text" name="name" placeholder="مثال: أجهزة لابتوب" required>
+  </div>
+
+  <h2>الحقول</h2>
+  <p class="subtitle">ما المعلومات التي ينبغي لهذا القسم تتبعها؟ يمكنك إضافة حقول أخرى لاحقًا من صفحة الأقسام.</p>
+
+  <div id="fieldRows"></div>
+  <button type="button" class="btn btn-sm" id="addFieldRow">+ إضافة حقل</button>
+
+  <div style="margin-top:1.25rem;">
+    <button type="submit" class="btn btn-primary">إنشاء القسم</button>
+    <a href="{{ url_for('categories.index') }}" class="btn">إلغاء</a>
+  </div>
+</form>
+
+<template id="fieldRowTemplate">
+  <div class="form-grid field-row" style="border-top:1px solid var(--border); padding-top:.75rem; margin-top:.75rem;">
+    <div class="field">
+      <label>اسم الحقل</label>
+      <input type="text" name="field_label" placeholder="مثال: الواط">
+    </div>
+    <div class="field">
+      <label>النوع</label>
+      <select name="field_type" class="field-type-select">
+        <option value="text">نص</option>
+        <option value="number">رقم</option>
+        <option value="textarea">نص طويل</option>
+        <option value="select">اختيار</option>
+        <option value="checkbox">مربع اختيار</option>
+      </select>
+    </div>
+    <div class="field field-options-row" style="display:none;">
+      <label>خيارات الاختيار</label>
+      <input type="text" name="field_options" placeholder="مفصولة بفواصل، مثال: أحمر, أزرق, أخضر">
+      <small class="hint">يمكنك تركها فارغة ثم تعبئة الخيارات لاحقًا.</small>
+    </div>
+    <div class="field" style="grid-column: 1 / -1; display:flex; align-items:center; gap:.5rem;">
+      <label style="display:flex; align-items:center; gap:.4rem; font-weight:400;">
+        <input type="checkbox" name="field_required" style="width:auto;"> مطلوب
+      </label>
+      <button type="button" class="btn btn-sm btn-danger remove-row">مرتجع</button>
+    </div>
+  </div>
+</template>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Repeatable field rows for the new-category form. Kept here (not in
+  // app.js) since it's a one-page concern with its own re-indexing logic.
+  const container = document.getElementById("fieldRows");
+  const template = document.getElementById("fieldRowTemplate");
+
+  function reindexRows() {
+    container.querySelectorAll(".field-row").forEach((row, i) => {
+      const checkbox = row.querySelector('input[name="field_required"]');
+      if (checkbox) {
+        checkbox.value = i;
+      }
+    });
+  }
+
+  function bindFieldTypeToggle(row) {
+    const typeSelect = row.querySelector('.field-type-select');
+    const optionsRow = row.querySelector('.field-options-row');
+    if (!typeSelect || !optionsRow) return;
+    const updateVisibility = () => {
+      optionsRow.style.display = typeSelect.value === 'select' ? '' : 'none';
+    };
+    typeSelect.addEventListener('change', updateVisibility);
+    updateVisibility();
+  }
+
+  function addRow() {
+    const clone = template.content.cloneNode(true);
+    const row = clone.querySelector(".field-row");
+    row.querySelector(".remove-row").addEventListener("click", () => {
+      row.remove();
+      reindexRows();
+    });
+    bindFieldTypeToggle(row);
+    container.appendChild(clone);
+    reindexRows();
+  }
+
+  document.getElementById("addFieldRow").addEventListener("click", addRow);
+  addRow();
+  addRow();
+  addRow();
+</script>
+{% endblock %}

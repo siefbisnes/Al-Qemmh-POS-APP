@@ -1,0 +1,807 @@
+{% extends "base.html" %}
+{% block title %}البيع — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header"><h1>💰 البيع</h1></div>
+
+<form method="post" class="panel" id="saleForm">
+  <input type="hidden" name="confirmed_customer_id" id="confirmedCustomerIdInput" value="">
+  <input type="hidden" name="force_new_customer" id="forceNewCustomerInput" value="">
+
+  <h2 style="margin-top: 0;">بيانات العميل</h2>
+  <p class="subtitle">صاحب عملية البيع.</p>
+  <div class="form-grid">
+    <div class="field" style="position:relative;">
+      <label>اسم العميل</label>
+      <input type="text" name="customer_name" id="customerNameInput" placeholder="أدخل اسم العميل" autocomplete="off">
+      <div class="customer-suggestions" id="customerNameSuggestions" hidden></div>
+    </div>
+    <div class="field" style="position:relative;">
+      <label>هاتف العميل</label>
+      <input type="text" name="customer_phone" id="customerPhoneInput" placeholder="أدخل رقم الهاتف" autocomplete="off">
+      <div class="customer-suggestions" id="customerPhoneSuggestions" hidden></div>
+    </div>
+  </div>
+
+  <div class="sale-lines-toolbar" style="margin-top: 1.5rem;">
+    <h2 style="margin: 0;">سطور البيع</h2>
+  </div>
+  <p class="subtitle" id="emptySaleHint">اضف المنتجات.</p>
+  <div id="saleLines"></div>
+
+  <div style="display:flex; gap:.5rem; margin-top:1rem;">
+    <button type="button" class="btn btn-sm btn-primary" id="openProductPickerButton">اختيار منتج</button>
+    <button type="button" class="btn btn-sm" id="addServiceLine">+ إضافة خدمة</button>
+  </div>
+
+  <h2 style="margin-top: 2rem">طلب توصيل</h2>
+  <label style="display:flex; align-items:center; gap:.5rem;">
+    <input type="checkbox" name="is_delivery_order" id="deliveryOrderCheckbox" style="width:auto;">
+    طلب توصيل
+  </label>
+  <div id="deliveryOrderRow" style="display:none; margin-top:.75rem;">
+    <div class="form-grid">
+      <div class="field">
+        <label>شركة الشحن</label>
+        <select name="delivery_provider" id="deliveryProviderSelect">
+          <option value="">اختر شركة الشحن…</option>
+          {% for p in delivery_providers %}
+            <option value="{{ p.slug }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>قيمة شحن الاوردر (ج.م)</label>
+        <input type="number" step="0.01" name="shipping_cost" id="shippingCostInput" value="0">
+      </div>
+    </div>
+
+    <!-- Two SEPARATE financial decisions, kept visually distinct on
+         purpose: this only controls where the shipping/delivery fee
+         itself is deducted from (immediately) - it has nothing to do
+         with how the order's own money will later be received at وصل. -->
+    <div id="shippingCostSourceArea" style="margin-top:.5rem;">
+      <label class="field-label" style="display:block; margin-bottom:.4rem;">خصم قيمة الشحن من</label>
+      <div class="payment-method-buttons" style="display:flex; gap:.6rem; flex-wrap:wrap;">
+        <label class="payment-method-btn selected" data-source-btn="drawer">
+          <input type="radio" name="shipping_cost_source" value="drawer" checked style="width:auto;"> الدرج
+        </label>
+        <label class="payment-method-btn" data-source-btn="online">
+          <input type="radio" name="shipping_cost_source" value="online" style="width:auto;"> تحويل أونلاين
+        </label>
+      </div>
+      <p id="shippingSourceExplainer" class="subtitle" style="transition: opacity .25s ease; margin-top:.5rem;">
+        سيتم خصم هذه القيمة من الدرج
+      </p>
+    </div>
+  </div>
+
+  <div id="normalPaymentSection">
+    <h2 style="margin-top: 2rem">طرق الدفع</h2>
+    <div id="paymentRows"></div>
+    <button type="button" class="btn btn-sm" id="addPaymentRow">+ إضافة طريقة دفع</button>
+  </div>
+
+  <div class="panel" style="background: var(--bg); margin-top: 1rem">
+    <div style="display:flex; justify-content:space-between; font-weight:600;">
+      <span>الإجمالي</span><span id="saleTotalDisplay">0.00 EGP</span>
+    </div>
+    <div style="display:flex; justify-content:space-between;">
+      <span>المبلغ المدفوع</span><span id="paymentTotalDisplay">0.00 EGP</span>
+    </div>
+    <div style="display:flex; justify-content:space-between;">
+      <span>الإجمالي المتبقي</span><span id="remainingDisplay">0.00 EGP</span>
+    </div>
+  </div>
+
+  <h2 style="margin-top: 2rem">الإيصال</h2>
+  <label style="display:flex; align-items:center; gap:.5rem;">
+    <input type="checkbox" name="receipt_requested" id="receiptCheckbox" style="width:auto;">
+    إنشاء إيصال لهذا البيع
+  </label>
+  <div id="receiptFormatRow" style="display:none; margin-top:.6rem;">
+    <label style="display:flex; gap:1rem;">
+      <span><input type="radio" name="receipt_format" value="pdf" checked style="width:auto;"> PDF</span>
+      <span><input type="radio" name="receipt_format" value="excel" style="width:auto;"> Excel</span>
+    </label>
+  </div>
+
+  <div id="customerProcessRow" style="display:none; margin-top:1rem;">
+    <label style="display:flex; align-items:center; gap:.5rem; font-weight:600;">
+      <input type="checkbox" name="customer_process" id="customerProcessCheckbox" style="width:auto;">
+      إكمال البيع كعملية عميل مع دفع جزئي
+    </label>
+  </div>
+  <div class="form-grid" style="margin-top:1rem; gap:1rem;">
+    <div class="field" style="flex:1;">
+      <label>تاريخ البيع</label>
+      <input type="date" name="sale_date" value="{{ default_sale_date }}">
+    </div>
+  </div>
+  <div style="margin-top:1.5rem; display:flex; gap:1rem; flex-wrap:wrap;">
+    <button id="saleSubmitButton" type="submit" class="btn btn-primary">إكمال البيع</button>
+    <a href="{{ url_for('dashboard.index') }}" class="btn">إلغاء</a>
+  </div>
+</form>
+
+<template id="saleLineTemplate">
+  <div class="panel sale-line" style="background: var(--bg);">
+    <input type="hidden" name="product_id" class="line-product-id">
+    <input type="hidden" name="service_description" value="">
+    <input type="hidden" name="line_token" class="line-token">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem; margin-bottom:.75rem;">
+      <strong class="line-product-label">عنصر البيع</strong>
+      <button type="button" class="btn btn-sm btn-danger remove-line">إزالة السطر</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>المنتج</label>
+        <div style="display:flex; align-items:center; gap:.5rem;">
+          <input type="text" class="selected-product-label line-custom-name-input" name="custom_product_name"
+                 placeholder="-- اختر منتج --"
+                 style="flex:1; min-height:2.4rem; padding:.5rem .75rem; border:1px solid var(--border); border-radius:8px; background:var(--surface);">
+          <button type="button" class="btn btn-sm choose-product-button">اختيار منتج</button>
+          <button type="button" class="btn btn-sm clear-product-button">إزالة</button>
+        </div>
+        <small class="muted line-product-meta" style="display:block; margin-top:.35rem; font-size:.86rem; color:#555;">
+          المخزون: <span class="line-stock">-</span>{% if show_purchase_price %} · سعر الشراء: <span class="line-purchase-price">-</span>{% endif %}
+        </small>
+      </div>
+      <div class="field">
+        <label>الكمية</label>
+        <input type="number" name="quantity" class="line-quantity" min="1" value="1">
+      </div>
+      <div class="field">
+        <label>سعر البيع (ج.م)</label>
+        <input type="number" step="0.01" name="selling_price" class="line-price">
+      </div>
+      <div class="field">
+        <label>الضمان (أيام)</label>
+        <input type="number" name="warranty_days" class="line-warranty" min="0" placeholder="{{ default_warranty_days }} (افتراضي)">
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="serviceLineTemplate">
+  <div class="panel sale-line" style="background: var(--bg);">
+    <input type="hidden" name="product_id" class="line-product-id" value="">
+    <input type="hidden" name="custom_product_name" value="">
+    <input type="hidden" name="line_token" class="line-token">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem; margin-bottom:.75rem;">
+      <strong class="line-product-label">عنصر البيع</strong>
+      <button type="button" class="btn btn-sm btn-danger remove-line">إزالة المنتج/الخدمه</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>الخدمة</label>
+        <input type="text" name="service_description" class="service-description" placeholder="أدخل اسم الخدمة">
+      </div>
+      <div class="field">
+        <label>السعر (ج.م)</label>
+        <input type="number" step="0.01" name="selling_price" class="line-price">
+      </div>
+      <input type="hidden" name="quantity" class="line-quantity" value="1">
+      <input type="hidden" name="warranty_days" value="">
+    </div>
+  </div>
+</template>
+
+<template id="paymentRowTemplate">
+  <div class="form-grid payment-row" style="margin-bottom:.5rem;">
+    <div class="field" style="margin-bottom:0;">
+      <select name="payment_method">
+        {% for value, label in payment_methods %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:0;">
+      <input type="number" step="0.01" name="payment_amount" class="payment-amount" placeholder="المبلغ">
+    </div>
+    <div class="field" style="margin-bottom:0;">
+      <button type="button" class="btn btn-sm btn-danger remove-payment">مرتجع</button>
+    </div>
+  </div>
+</template>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const linesContainer = document.getElementById("saleLines");
+  const lineTemplate = document.getElementById("saleLineTemplate");
+  const paymentsContainer = document.getElementById("paymentRows");
+  const productData = {{ products|tojson }};
+  const servicePlaceholderId = {{ service_placeholder_id if service_placeholder_id is not none else 'null' }};
+  const serviceLineTemplate = document.getElementById("serviceLineTemplate");
+  const paymentTemplate = document.getElementById("paymentRowTemplate");
+  const emptySaleHint = document.getElementById("emptySaleHint");
+  const defaultProductId = {{ preselected_id if preselected_id is not none else 'null' }};
+  const customerProcessCheckbox = document.getElementById("customerProcessCheckbox");
+  const customerProcessRow = document.getElementById("customerProcessRow");
+  const submitButton = document.getElementById("saleSubmitButton");
+  const saleForm = document.getElementById("saleForm");
+  const customerNameInput = document.getElementById("customerNameInput");
+  const customerPhoneInput = document.getElementById("customerPhoneInput");
+  const confirmedCustomerIdInput = document.getElementById("confirmedCustomerIdInput");
+
+  let pendingSubmit = false;
+
+  // ---------- smart customer autocomplete (spec §3-6) ----------
+  function setupCustomerAutocomplete(input, suggestionsBox) {
+    let debounceTimer = null;
+    let activeRequest = 0;
+
+    function renderSuggestions(customers) {
+      if (!customers.length) {
+        suggestionsBox.hidden = true;
+        suggestionsBox.innerHTML = "";
+        return;
+      }
+      suggestionsBox.innerHTML = customers.map((c) => `
+        <div class="customer-suggestion-item" data-id="${c.id}" data-name="${escapeHtml(c.name)}" data-phone="${escapeHtml(c.phone)}">
+          <span class="cs-name">${escapeHtml(c.name || "بدون اسم")}</span>
+          <span class="cs-phone">${escapeHtml(c.phone || "بدون رقم")}</span>
+        </div>
+      `).join("");
+      suggestionsBox.hidden = false;
+    }
+
+    input.addEventListener("input", () => {
+      confirmedCustomerIdInput.value = ""; // typing invalidates any previous selection
+      const q = input.value.trim();
+      clearTimeout(debounceTimer);
+      if (q.length < 2) {
+        suggestionsBox.hidden = true;
+        return;
+      }
+      debounceTimer = setTimeout(() => {
+        const requestId = ++activeRequest;
+        fetch(`{{ url_for('customers.search') }}?q=${encodeURIComponent(q)}`)
+          .then((r) => r.json())
+          .then((customers) => {
+            if (requestId !== activeRequest) return; // a newer keystroke already superseded this
+            renderSuggestions(customers);
+          })
+          .catch(() => { suggestionsBox.hidden = true; });
+      }, 200);
+    });
+
+    suggestionsBox.addEventListener("click", (e) => {
+      const item = e.target.closest(".customer-suggestion-item");
+      if (!item) return;
+      customerNameInput.value = item.dataset.name;
+      customerPhoneInput.value = item.dataset.phone;
+      confirmedCustomerIdInput.value = item.dataset.id;
+      suggestionsBox.hidden = true;
+    });
+
+    input.addEventListener("blur", () => {
+      // small delay so a click on a suggestion registers before we hide it
+      setTimeout(() => { suggestionsBox.hidden = true; }, 150);
+    });
+    input.addEventListener("focus", () => {
+      if (suggestionsBox.innerHTML && input.value.trim().length >= 2) {
+        suggestionsBox.hidden = false;
+      }
+    });
+  }
+  setupCustomerAutocomplete(customerNameInput, document.getElementById("customerNameSuggestions"));
+  setupCustomerAutocomplete(customerPhoneInput, document.getElementById("customerPhoneSuggestions"));
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str == null ? "" : String(str);
+    return div.innerHTML;
+  }
+
+  function makeLineToken() {
+    return "l" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  function recalcTotals() {
+    let saleTotal = 0;
+    linesContainer.querySelectorAll(".sale-line").forEach((line) => {
+      const qty = parseFloat(line.querySelector(".line-quantity").value) || 0;
+      const price = parseFloat(line.querySelector(".line-price").value) || 0;
+      saleTotal += qty * price;
+    });
+    let paymentTotal = 0;
+    paymentsContainer.querySelectorAll(".payment-amount").forEach((input) => {
+      paymentTotal += parseFloat(input.value) || 0;
+    });
+    document.getElementById("saleTotalDisplay").textContent = saleTotal.toFixed(2) + " EGP";
+    document.getElementById("paymentTotalDisplay").textContent = paymentTotal.toFixed(2) + " EGP";
+    const remaining = saleTotal - paymentTotal;
+    document.getElementById("remainingDisplay").textContent = remaining.toFixed(2) + " EGP";
+
+    const mismatch = Math.abs(remaining) > 0.009 && !deliveryOrderCheckbox.checked;
+    customerProcessRow.style.display = mismatch ? "block" : "none";
+    if (!mismatch) {
+      customerProcessCheckbox.checked = false;
+    }
+  }
+
+  function updateEmptyHint() {
+    emptySaleHint.style.display = linesContainer.children.length ? "none" : "block";
+  }
+
+  function addLine(templateEl) {
+    const clone = templateEl.content.cloneNode(true);
+    const lineEl = clone.querySelector(".sale-line");
+    lineEl.querySelector(".line-token").value = makeLineToken();
+    linesContainer.appendChild(clone);
+    updateEmptyHint();
+    recalcTotals();
+    return lineEl;
+  }
+
+  function addPaymentRow() {
+    const clone = paymentTemplate.content.cloneNode(true);
+    paymentsContainer.appendChild(clone);
+    recalcTotals();
+  }
+
+  linesContainer.addEventListener("click", (e) => {
+    if (e.target.classList.contains("remove-line")) {
+      e.target.closest(".sale-line").remove();
+      updateEmptyHint();
+      recalcTotals();
+    }
+  });
+  linesContainer.addEventListener("input", recalcTotals);
+
+  paymentsContainer.addEventListener("click", (e) => {
+    if (e.target.classList.contains("remove-payment")) {
+      e.target.closest(".payment-row").remove();
+      recalcTotals();
+    }
+  });
+  paymentsContainer.addEventListener("input", recalcTotals);
+
+  document.getElementById("addPaymentRow").addEventListener("click", addPaymentRow);
+
+  // طلب توصيل (spec §2): hides the normal payment section, doesn't ask
+  // for received money, and relabels the submit button to إتمام عملية
+  // الاوردر so it's clear this only creates the order, not receives cash.
+  const deliveryOrderCheckbox = document.getElementById("deliveryOrderCheckbox");
+  const deliveryOrderRow = document.getElementById("deliveryOrderRow");
+  const normalPaymentSection = document.getElementById("normalPaymentSection");
+  deliveryOrderCheckbox.addEventListener("change", (e) => {
+    const isDelivery = e.target.checked;
+    deliveryOrderRow.style.display = isDelivery ? "block" : "none";
+    normalPaymentSection.style.display = isDelivery ? "none" : "block";
+    submitButton.textContent = isDelivery ? "إتمام عملية الاوردر" : "إكمال البيع";
+    if (isDelivery) {
+      paymentsContainer.querySelectorAll(".payment-row").forEach((row) => row.remove());
+    }
+    recalcTotals();
+  });
+
+  // قيمة شحن الاوردر: smooth explanatory-text swap between الدرج and
+  // التحويلات الأونلاين (spec §2/§15) - purely a source-of-deduction
+  // choice for the SHIPPING fee, kept entirely separate from how the
+  // order's own money is later received at وصل.
+  const shippingSourceExplainer = document.getElementById("shippingSourceExplainer");
+  document.querySelectorAll('input[name="shipping_cost_source"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      const isOnline = e.target.value === "online";
+      document.querySelectorAll('[data-source-btn]').forEach((label) => {
+        label.classList.toggle("selected", label.dataset.sourceBtn === e.target.value);
+      });
+      shippingSourceExplainer.style.opacity = "0";
+      setTimeout(() => {
+        shippingSourceExplainer.textContent = isOnline
+          ? "سيتم خصم هذه القيمة من التحويلات الأونلاين"
+          : "سيتم خصم هذه القيمة من الدرج";
+        shippingSourceExplainer.style.opacity = "1";
+      }, 150);
+    });
+  });
+
+  document.getElementById("addServiceLine").addEventListener("click", () => {
+    addLine(serviceLineTemplate);
+  });
+
+  document.getElementById("receiptCheckbox").addEventListener("change", (e) => {
+    document.getElementById("receiptFormatRow").style.display = e.target.checked ? "block" : "none";
+  });
+
+  function addLineFromProduct(productId) {
+    const product = productData.find((p) => p.id === productId);
+    if (!product) return;
+    const lineEl = addLine(lineTemplate);
+    lineEl.querySelector(".line-product-id").value = product.id;
+    lineEl.querySelector(".selected-product-label").value = product.name;
+    lineEl.querySelector(".line-product-label").textContent = product.name;
+    lineEl.querySelector(".line-price").value = product.selling_price;
+    lineEl.querySelector(".line-stock").textContent = product.quantity;
+    const purchasePriceEl = lineEl.querySelector(".line-purchase-price");
+    if (purchasePriceEl) {
+      purchasePriceEl.textContent = product.purchase_price != null ? product.purchase_price : "-";
+    }
+    recalcTotals();
+  }
+
+  // ---------- product picker ----------
+
+  function fillLineWithProduct(targetLineEl, p) {
+    targetLineEl.querySelector(".line-product-id").value = p.id;
+    targetLineEl.querySelector(".selected-product-label").value = p.name;
+    targetLineEl.querySelector(".line-product-label").textContent = p.name;
+    targetLineEl.querySelector(".line-price").value = p.selling_price;
+    targetLineEl.querySelector(".line-stock").textContent = p.quantity;
+    const purchasePriceEl = targetLineEl.querySelector(".line-purchase-price");
+    if (purchasePriceEl) {
+      purchasePriceEl.textContent = p.purchase_price != null ? p.purchase_price : "-";
+    }
+  }
+
+  let pickerTargetLineEl = null;
+  let pickerSelectedIds = new Set();
+  let pickerOverlay = null;
+  let pickerListEl = null;
+  let pickerSearchInputEl = null;
+
+  function renderPickerList(filter) {
+    pickerListEl.innerHTML = "";
+    const f = (filter || "").toLowerCase();
+    const filtered = productData.filter((p) => p.name.toLowerCase().includes(f));
+    if (!filtered.length) {
+      const empty = document.createElement("p");
+      empty.className = "subtitle";
+      empty.textContent = "لا توجد نتائج.";
+      pickerListEl.appendChild(empty);
+      return;
+    }
+    filtered.forEach((p) => {
+      const item = document.createElement("label");
+      item.style.cssText = "display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:.5rem; text-align:right; cursor:pointer; padding:.6rem .75rem; border:1px solid var(--border); border-radius:10px; background:var(--surface);";
+
+      const left = document.createElement("span");
+      left.style.cssText = "display:flex; align-items:center; gap:.6rem; flex:1; min-width:0;";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.style.width = "auto";
+      checkbox.checked = pickerSelectedIds.has(p.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) pickerSelectedIds.add(p.id);
+        else pickerSelectedIds.delete(p.id);
+      });
+
+      const infoBlock = document.createElement("span");
+      infoBlock.style.cssText = "display:flex; flex-direction:column; min-width:0;";
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = p.name;
+      nameSpan.style.cssText = "overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+      const priceSpan = document.createElement("span");
+      priceSpan.className = "muted";
+      priceSpan.style.fontSize = ".8rem";
+      priceSpan.textContent = "الكمية الحالية: " + p.quantity + (p.selling_price != null ? " · " + p.selling_price + " ج.م" : "");
+      infoBlock.appendChild(nameSpan);
+      infoBlock.appendChild(priceSpan);
+
+      left.appendChild(checkbox);
+      left.appendChild(infoBlock);
+
+      item.appendChild(left);
+
+      if (p.image_url) {
+        const thumb = document.createElement("img");
+        thumb.src = p.image_url;
+        thumb.style.cssText = "width:44px; height:44px; object-fit:cover; border-radius:8px; flex:0 0 auto;";
+        thumb.onerror = function () { this.style.display = "none"; };
+        item.appendChild(thumb);
+      }
+
+      pickerListEl.appendChild(item);
+    });
+  }
+
+  function openProductPicker(lineEl) {
+    pickerTargetLineEl = lineEl;
+    pickerSelectedIds = new Set();
+
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
+
+    const box = document.createElement("div");
+    box.className = "panel";
+    box.style.cssText = "max-width:480px;width:100%;max-height:82vh;overflow:auto;display:flex;flex-direction:column;";
+    box.dir = "rtl";
+
+    box.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem;">
+        <h2 style="margin:0;">اختيار منتج أو أكثر</h2>
+        <button type="button" class="btn btn-sm" id="pickerCloseButton">إغلاق</button>
+      </div>
+      <p class="subtitle">حدد صنفاً واحداً أو عدة أصناف، ثم اضغط "إضافة المحدد" لإضافتها كلها للبيع دفعة واحدة.</p>
+      <input type="search" id="pickerSearchInput" placeholder="ابحث عن منتج..." style="margin-bottom:.75rem;">
+      <div id="pickerList" style="overflow:auto; flex:1;"></div>
+      <button type="button" class="btn btn-primary" id="pickerAddButton" style="width:100%; margin-top:1rem;">إضافة المحدد</button>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    pickerOverlay = overlay;
+    pickerListEl = box.querySelector("#pickerList");
+    pickerSearchInputEl = box.querySelector("#pickerSearchInput");
+
+    pickerSearchInputEl.addEventListener("input", () => renderPickerList(pickerSearchInputEl.value));
+    box.querySelector("#pickerCloseButton").addEventListener("click", closeProductPicker);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closeProductPicker();
+    });
+    box.querySelector("#pickerAddButton").addEventListener("click", () => {
+      if (!pickerSelectedIds.size) {
+        alert("اختر منتجاً واحداً على الأقل.");
+        return;
+      }
+      const selectedProducts = productData.filter((p) => pickerSelectedIds.has(p.id));
+      const lineAlreadyHasProduct = pickerTargetLineEl
+        ? !!pickerTargetLineEl.querySelector(".line-product-id").value
+        : true;
+      selectedProducts.forEach((p, index) => {
+        const targetLineEl = (index === 0 && pickerTargetLineEl && !lineAlreadyHasProduct)
+          ? pickerTargetLineEl
+          : addLine(lineTemplate);
+        fillLineWithProduct(targetLineEl, p);
+      });
+      recalcTotals();
+      closeProductPicker();
+    });
+
+    renderPickerList("");
+    pickerSearchInputEl.focus();
+  }
+
+  function closeProductPicker() {
+    if (pickerOverlay) {
+      document.body.removeChild(pickerOverlay);
+    }
+    pickerOverlay = null;
+    pickerListEl = null;
+    pickerSearchInputEl = null;
+    pickerTargetLineEl = null;
+  }
+
+  document.getElementById("openProductPickerButton").addEventListener("click", () => openProductPicker(null));
+
+  linesContainer.addEventListener("click", (e) => {
+    if (e.target.classList.contains("choose-product-button")) {
+      openProductPicker(e.target.closest(".sale-line"));
+    }
+    if (e.target.classList.contains("clear-product-button")) {
+      const lineEl = e.target.closest(".sale-line");
+      lineEl.querySelector(".line-product-id").value = "";
+      lineEl.querySelector(".selected-product-label").value = "";
+      lineEl.querySelector(".line-product-label").textContent = "عنصر البيع";
+      lineEl.querySelector(".line-stock").textContent = "-";
+      const purchasePriceEl = lineEl.querySelector(".line-purchase-price");
+      if (purchasePriceEl) purchasePriceEl.textContent = "-";
+      recalcTotals();
+    }
+  });
+
+  // ---------- customer duplicate-name confirmation (Rule 5) ----------
+
+  function getTransactionCustomerName() {
+    return customerNameInput.value.trim();
+  }
+  function getTransactionCustomerPhone() {
+    return customerPhoneInput.value.trim();
+  }
+
+  function showCustomerConfirmDialog(candidates, txnName) {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
+
+    const box = document.createElement("div");
+    box.className = "panel";
+    box.style.cssText = "max-width:480px;width:100%;max-height:82vh;overflow:auto;";
+    box.dir = "rtl";
+
+    let candidatesHtml = candidates.map((c, i) => `
+      <label style="display:flex; align-items:center; gap:.5rem; padding:.5rem 0; border-bottom:1px solid var(--border);">
+        <input type="radio" name="customer_candidate" value="${c.id}" style="width:auto;" ${i === 0 ? "checked" : ""}>
+        <span>${escapeHtml(c.name || "بدون اسم")} · ${escapeHtml(c.phone || "بدون رقم هاتف")}${c.last_purchase_date ? " · آخر شراء: " + escapeHtml(c.last_purchase_date.slice(0, 10)) : ""}</span>
+      </label>
+    `).join("");
+
+    box.innerHTML = `
+      <h2>يوجد أكثر من عميل بهذا الاسم</h2>
+      <p class="subtitle">الاسم "${escapeHtml(txnName)}" يطابق أكثر من عميل مسجل. اختر العميل الصحيح، أو أنشئ عميلاً جديداً.</p>
+      <div style="margin:1rem 0;">${candidatesHtml}</div>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end;">
+        <button type="button" class="btn" id="customerDialogCancel">إلغاء</button>
+        <button type="button" class="btn" id="customerDialogCreateNew">إنشاء عميل جديد</button>
+        <button type="button" class="btn btn-primary" id="customerDialogUseExisting">استخدام العميل المحدد</button>
+      </div>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    function close() {
+      document.body.removeChild(overlay);
+    }
+
+    document.getElementById("customerDialogCancel").addEventListener("click", () => {
+      close();
+    });
+
+    document.getElementById("customerDialogCreateNew").addEventListener("click", () => {
+      document.getElementById("forceNewCustomerInput").value = "1";
+      document.getElementById("confirmedCustomerIdInput").value = "";
+      close();
+      pendingSubmit = true;
+      saleForm.requestSubmit(submitButton);
+    });
+
+    document.getElementById("customerDialogUseExisting").addEventListener("click", () => {
+      const selected = box.querySelector('input[name="customer_candidate"]:checked');
+      if (!selected) {
+        alert("اختر عميل من القائمة أولاً.");
+        return;
+      }
+      document.getElementById("confirmedCustomerIdInput").value = selected.value;
+      document.getElementById("forceNewCustomerInput").value = "";
+      close();
+      pendingSubmit = true;
+      saleForm.requestSubmit(submitButton);
+    });
+  }
+
+  // ---------- Customer duplicate name/phone, auto-fill confirmation ----------
+
+  function fieldLabel(field) {
+    return field === "name" ? "الاسم" : "رقم الهاتف";
+  }
+
+  function showMatchConfirmDialog(candidate, missingFields, txnName, txnPhone) {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
+
+    const box = document.createElement("div");
+    box.className = "panel";
+    box.style.cssText = "max-width:440px;width:100%;max-height:82vh;overflow:auto;";
+    box.dir = "rtl";
+
+    const existingName = candidate.name || "بدون اسم";
+    const existingPhone = candidate.phone || "بدون رقم هاتف";
+
+    let bodyText;
+    let confirmLabel;
+    if (missingFields.length) {
+      const missingText = missingFields.map(fieldLabel).join(" و");
+      bodyText = `يوجد عميل مطابق: <strong>${escapeHtml(existingName)}</strong> · ${escapeHtml(existingPhone)}.
+        بيانات ${escapeHtml(missingText)} غير مكتملة لدى هذا العميل. هل تريد إكمالها ببيانات هذا البيع
+        (${escapeHtml(txnName || "—")} · ${escapeHtml(txnPhone || "—")})، أم أن هذا عميل جديد؟`;
+      confirmLabel = "إكمال بياناته";
+    } else {
+      bodyText = `الاسم/الرقم الذي أدخلته يخص عميلاً مسجلاً بالفعل: <strong>${escapeHtml(existingName)}</strong> · ${escapeHtml(existingPhone)}.
+        سيتم تسجيل هذا البيع على هذا العميل. هل هذا صحيح، أم أن هذا عميل جديد؟`;
+      confirmLabel = "نعم، هذا هو العميل";
+    }
+
+    box.innerHTML = `
+      <h2>تأكيد ربط البيع بالعميل</h2>
+      <p class="subtitle">${bodyText}</p>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end; margin-top:1rem;">
+        <button type="button" class="btn" id="fillDialogCancel">إلغاء</button>
+        <button type="button" class="btn" id="fillDialogDifferentPerson">إنشاء عميل جديد</button>
+        <button type="button" class="btn btn-primary" id="fillDialogConfirm">${confirmLabel}</button>
+      </div>`;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    function close() {
+      document.body.removeChild(overlay);
+    }
+
+    document.getElementById("fillDialogCancel").addEventListener("click", () => {
+      close();
+    });
+
+    document.getElementById("fillDialogDifferentPerson").addEventListener("click", () => {
+      document.getElementById("forceNewCustomerInput").value = "1";
+      document.getElementById("confirmedCustomerIdInput").value = "";
+      close();
+      pendingSubmit = true;
+      saleForm.requestSubmit(submitButton);
+    });
+
+    document.getElementById("fillDialogConfirm").addEventListener("click", () => {
+      document.getElementById("confirmedCustomerIdInput").value = candidate.id;
+      document.getElementById("forceNewCustomerInput").value = "";
+      close();
+      pendingSubmit = true;
+      saleForm.requestSubmit(submitButton);
+    });
+  }
+
+  saleForm.addEventListener("submit", (e) => {
+    customerNameInput.value = customerNameInput.value.trim();
+    customerPhoneInput.value = customerPhoneInput.value.trim();
+
+    const saleTotal = Array.from(linesContainer.querySelectorAll(".sale-line")).reduce((sum, line) => {
+      const qty = parseFloat(line.querySelector(".line-quantity").value) || 0;
+      const price = parseFloat(line.querySelector(".line-price").value) || 0;
+      return sum + qty * price;
+    }, 0);
+    const paymentTotal = Array.from(paymentsContainer.querySelectorAll(".payment-amount")).reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
+    const mismatch = Math.abs(saleTotal - paymentTotal) > 0.009 && !deliveryOrderCheckbox.checked;
+
+    if (mismatch && !customerProcessCheckbox.checked) {
+      e.preventDefault();
+      submitButton.disabled = false;
+      alert("يجب أن يتطابق إجمالي المدفوع مع الإجمالي أو تفعيل خيار عملية العميل قبل إكمال البيع.");
+      return;
+    }
+
+    const remainingDebt = saleTotal - paymentTotal;
+
+    // Delivery orders specifically require BOTH name and phone (spec §2/§7).
+    if (deliveryOrderCheckbox.checked) {
+      if (!getTransactionCustomerName()) {
+        e.preventDefault();
+        alert("اسم العميل مطلوب لإنشاء طلب توصيل.");
+        return;
+      }
+      if (!getTransactionCustomerPhone()) {
+        e.preventDefault();
+        alert("رقم هاتف العميل مطلوب لإنشاء طلب توصيل.");
+        return;
+      }
+    }
+
+    if (remainingDebt > 0.009 && !getTransactionCustomerName() && !getTransactionCustomerPhone()) {
+      e.preventDefault();
+      alert("لإتمام عملية بها مبلغ متبقٍ (دين)، يجب إدخال اسم العميل أو رقم هاتفه على الأقل.");
+      return;
+    }
+
+    if (pendingSubmit) {
+      pendingSubmit = false;
+      return;
+    }
+
+    const txnName = getTransactionCustomerName();
+    const txnPhone = getTransactionCustomerPhone();
+    if (!txnName && !txnPhone) {
+      return;
+    }
+
+    e.preventDefault();
+    fetch("{{ url_for('sales.check_customer') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer_name: txnName, customer_phone: txnPhone }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.status === "needs_confirmation") {
+          showCustomerConfirmDialog(data.candidates, txnName);
+        } else if (data.status === "needs_match_confirmation") {
+          showMatchConfirmDialog(data.candidate, data.missing_fields, txnName, txnPhone);
+        } else {
+          pendingSubmit = true;
+          saleForm.requestSubmit(submitButton);
+        }
+      })
+      .catch(() => {
+        pendingSubmit = true;
+        saleForm.requestSubmit(submitButton);
+      });
+  });
+
+  if (defaultProductId) {
+    addLineFromProduct(defaultProductId);
+  }
+  addPaymentRow();
+  recalcTotals();
+</script>
+{% endblock %}

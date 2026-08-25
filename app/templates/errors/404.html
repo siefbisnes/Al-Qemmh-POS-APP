@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}غير موجود — القمة{% endblock %}
+{% block content %}
+<div class="empty-state">
+  <h1>الصفحة غير موجودة</h1>
+  <p>هذا المنتج أو الصفحة غير موجودة (ربما تمت إزالتها).</p>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">العودة إلى لوحة التحكم</a>
+</div>
+{% endblock %}

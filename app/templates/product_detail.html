@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>{{ product.name }}</h1>
+    <p class="subtitle">{{ product.category_name }} · أضيف في {{ product.date_added[:10] }}</p>
+  </div>
+  <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+    <a href="{{ url_for('sales.new', product_id=product.id) }}" class="btn btn-primary">تسجيل بيع</a>
+    <a href="{{ url_for('products.edit', product_id=product.id) }}" class="btn">تعديل</a>
+    <button type="button" class="btn" id="downloadProductButton">تحميل</button>
+    <form method="post" action="{{ url_for('products.delete', product_id=product.id) }}" id="deleteProductForm">
+      <button type="button" class="btn btn-danger" id="deleteProductButton">حذف المنتج</button>
+    </form>
+    <form method="post" action="{{ url_for('products.remove_stock', product_id=product.id) }}" id="returnStockForm">
+      <input type="hidden" name="quantity" id="returnStockQuantity">
+      <button type="button" class="btn btn-danger" id="returnStockButton">مرتجع</button>
+    </form>
+    <form method="post" action="{{ url_for('products.writeoff', product_id=product.id) }}" id="writeoffForm">
+      <input type="hidden" name="quantity" id="writeoffQuantity">
+      <input type="hidden" name="note" id="writeoffNote" value="">
+      <button type="button" class="btn btn-warning" id="writeoffButton"
+              data-purchase="{{ product.purchase_price }}"
+              data-selling="{{ product.selling_price }}"
+              data-max="{{ product.quantity }}"
+              {% if product.quantity|int <= 0 %}disabled{% endif %}>
+        الهالك
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="form-grid">
+  <div>
+    <div class="panel">
+      <h2>الصور</h2>
+      {% if product.images %}
+        <div class="gallery">
+          {% for img in product.images %}
+            <div class="gallery-item" data-image-id="{{ img.id }}">
+              <button class="img-delete-btn" data-image-id="{{ img.id }}" data-delete-url="{{ url_for('products.delete_image', product_id=product.id, image_id=img.id) }}" title="حذف الصورة">✕</button>
+              <img src="{{ url_for('media.product_image', filename=img.filepath) }}" alt="{{ product.name }}">
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="subtitle">لا يوجد صور حاليا.</p>
+      {% endif %}
+      <form method="post" action="{{ url_for('products.upload_images', product_id=product.id) }}" enctype="multipart/form-data">
+        <div class="field">
+          <label>إضافة صور أخرى</label>
+          <input type="file" name="images" accept="image/*" multiple>
+        </div>
+        <button type="submit" class="btn btn-sm">رفع</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>المواصفات</h2>
+      {% if product.specifications %}
+        <table class="data-table spec-table">
+          {% for s in product.specifications %}
+            <tr><td>{{ s.field_label }}</td><td>{{ s.value }}</td></tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p class="subtitle">لا توجد مواصفات مسجلة.</p>
+      {% endif %}
+      {% if product.description %}
+        <h3 style="margin-top:1rem;">الوصف</h3>
+        <p>{{ product.description }}</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h2>التوافق</h2>
+      {% if product.compatibility %}
+        <table class="data-table">
+          <tr><th>النوع</th><th>متوافق مع</th><th>ملاحظات</th><th></th></tr>
+          {% for c in product.compatibility %}
+            <tr>
+              <td>{{ c.component_type }}</td>
+              <td>{{ c.component_value }}</td>
+              <td>{{ c.notes or '' }}</td>
+              <td>
+                <form method="post" action="{{ url_for('products.delete_compatibility', product_id=product.id, entry_id=c.id) }}"
+                      onsubmit="return confirm('مرتجع هذا السجل؟');">
+                  <button type="submit" class="btn btn-sm btn-danger">مرتجع</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p class="subtitle"></p>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('products.add_compatibility', product_id=product.id) }}" class="form-grid" style="margin-top:1rem;">
+        <div class="field">
+          <label>نوع المكون</label>
+          <input type="text" name="component_type" placeholder="مثال: CPU, RAM, Storage" required>
+        </div>
+        <div class="field">
+          <label>القيمة المتوافقة</label>
+          <input type="text" name="component_value" placeholder="مثال: E5-1650 V3" required>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+          <label>ملاحظات (اختياري)</label>
+          <input type="text" name="notes">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <button type="submit" class="btn">إضافة عنصر توافق</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>السعر</h2>
+      <div>
+        {% if show_purchase_price %}
+        <p><span class="badge badge-muted">شراء</span> <span class="price-value">{{ product.purchase_price|money }}</span></p>
+        {% endif %}
+        <p><span class="badge badge-muted">بيع</span> <span class="price-value">{{ product.selling_price|money }}</span></p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>المخزون</h2>
+      <p class="stat-card" style="border:none; padding:0;">
+        <span class="badge badge-grade-{{ product.grade|lower }}">الدرجة {{ product.grade }}</span>
+        &nbsp; <span class="qty {{ 'low' if product.quantity <= 3 }}">{{ product.quantity }} في المخزون</span>
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>سجل المبيعات</h2>
+      {% if product.sales_history %}
+        <table class="data-table">
+          <tr><th>التاريخ</th><th>الكمية</th><th>العميل</th></tr>
+          {% for s in product.sales_history %}
+            <tr>
+              <td>{{ s.sale_date[:16] }}</td>
+              <td>{{ s.quantity }}</td>
+              <td>{{ s.customer_name or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p class="subtitle">لم يُبع بعد.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h2>سجل الهالك</h2>
+      {% if product.writeoffs %}
+        <table class="data-table">
+          <tr>
+            <th>التاريخ</th>
+            <th>الكمية</th>
+            {% if show_purchase_price %}<th>خسارة تكلفة</th>{% endif %}
+            <th>قيمة بيع ضائعة</th>
+          </tr>
+          {% for w in product.writeoffs %}
+            <tr>
+              <td>{{ (w.writeoff_date or '')[:16] }}</td>
+              <td>{{ w.quantity }}</td>
+              {% if show_purchase_price %}<td>{{ w.cost_loss|money }}</td>{% endif %}
+              <td>{{ w.revenue_loss|money }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p class="subtitle">لا توجد عمليات الهالك بعد. استخدم زر «الهالك» أعلاه.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+// مرتجع on the product detail page: a partial stock removal, not a
+// full delete. Asks how many units, checks it against what's actually
+// in stock client-side (server re-checks too), then submits.
+(function () {
+  var button = document.getElementById("returnStockButton");
+  if (!button) return;
+
+  var maxQty = {{ product.quantity }};
+
+  button.addEventListener("click", function () {
+    var input = prompt("كم عدد الوحدات التي تريد مرتجعها؟ (المتاح بالمخزون: " + maxQty + ")");
+    if (input === null) return;
+
+    var qty = parseInt(input, 10);
+    if (isNaN(qty) || qty <= 0) {
+      alert("الرجاء إدخال رقم صحيح أكبر من صفر.");
+      return;
+    }
+    if (qty > maxQty) {
+      alert("لا يمكن مرتجع كمية أكبر من المتاح بالمخزون (" + maxQty + ").");
+      return;
+    }
+
+    document.getElementById("returnStockQuantity").value = qty;
+    document.getElementById("returnStockForm").submit();
+  });
+})();
+
+// الهالك: quantity + optional note in a floating modal dialog, with a
+// live preview of cost/revenue impact, instead of prompt()/confirm().
+// Built the same way as the sale page's product picker - a
+// position:fixed overlay created with document.createElement and
+// appended to document.body.
+(function () {
+  var button = document.getElementById("writeoffButton");
+  if (!button) return;
+
+  var maxQty = parseInt(button.getAttribute("data-max"), 10) || 0;
+  var purchase = parseFloat(button.getAttribute("data-purchase")) || 0;
+  var selling = parseFloat(button.getAttribute("data-selling")) || 0;
+
+  function money(n) {
+    return (Math.round(n * 100) / 100).toLocaleString("en-EG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + " EGP";
+  }
+
+  function openWriteoffDialog() {
+    if (maxQty <= 0) {
+      alert("لا يوجد مخزون.");
+      return;
+    }
+
+    var overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
+
+    var box = document.createElement("div");
+    box.className = "panel";
+    box.style.cssText = "max-width:420px;width:100%;max-height:88vh;overflow:auto;";
+    box.dir = "rtl";
+
+    box.innerHTML =
+      '<div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem;">' +
+        '<h2 style="margin:0;">الهالك</h2>' +
+        '<button type="button" class="btn btn-sm" id="writeoffDialogClose">إغلاق</button>' +
+      '</div>' +
+      '<p class="subtitle">سجل الوحدات التالفة أو المفقودة. سيتم إنقاص المخزون وتحديث لوحة المالك.</p>' +
+      '<div class="field">' +
+        '<label>الكمية (المتاح: ' + maxQty + ')</label>' +
+        '<input type="number" id="writeoffDialogQty" min="1" max="' + maxQty + '" value="1">' +
+      '</div>' +
+      '<div class="field">' +
+        '<label>ملاحظة (اختياري)</label>' +
+        '<input type="text" id="writeoffDialogNote" placeholder="سبب الشطب...">' +
+      '</div>' +
+      '<div class="panel" style="background:rgba(0,0,0,.03); margin-top:.5rem;">' +
+        '<p style="margin:.2rem 0;">سعر الشراء للوحدة: <strong>' + money(purchase) + '</strong></p>' +
+        '<p style="margin:.2rem 0;">سعر البيع للوحدة: <strong>' + money(selling) + '</strong></p>' +
+        '<p style="margin:.2rem 0;">خسارة التكلفة (تُخصم من صافي الربح): <strong id="writeoffCostLoss">' + money(purchase) + '</strong></p>' +
+        '<p style="margin:.2rem 0;">قيمة البيع الضائعة: <strong id="writeoffRevenueLoss">' + money(selling) + '</strong></p>' +
+      '</div>' +
+      '<button type="button" class="btn btn-danger" id="writeoffDialogConfirm" style="width:100%; margin-top:1rem;">تأكيد الشطب</button>';
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    var qtyInput = box.querySelector("#writeoffDialogQty");
+    var noteInput = box.querySelector("#writeoffDialogNote");
+    var costLossEl = box.querySelector("#writeoffCostLoss");
+    var revenueLossEl = box.querySelector("#writeoffRevenueLoss");
+
+    function updatePreview() {
+      var qty = parseInt(qtyInput.value, 10);
+      if (isNaN(qty) || qty < 0) qty = 0;
+      costLossEl.textContent = money(qty * purchase);
+      revenueLossEl.textContent = money(qty * selling);
+    }
+    qtyInput.addEventListener("input", updatePreview);
+
+    function closeDialog() {
+      document.body.removeChild(overlay);
+    }
+    box.querySelector("#writeoffDialogClose").addEventListener("click", closeDialog);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closeDialog();
+    });
+
+    box.querySelector("#writeoffDialogConfirm").addEventListener("click", function () {
+      var qty = parseInt(qtyInput.value, 10);
+      if (isNaN(qty) || qty <= 0) {
+        alert("الرجاء إدخال رقم صحيح أكبر من صفر.");
+        return;
+      }
+      if (qty > maxQty) {
+        alert("لا يمكن شطب كمية أكبر من المتاح (" + maxQty + ").");
+        return;
+      }
+
+      document.getElementById("writeoffQuantity").value = qty;
+      document.getElementById("writeoffNote").value = noteInput.value.trim();
+      document.getElementById("writeoffForm").submit();
+    });
+
+    qtyInput.focus();
+    qtyInput.select();
+  }
+
+  button.addEventListener("click", openWriteoffDialog);
+
+})();
+</script>
+
+<style>
+.gallery { display:flex; gap:.5rem; flex-wrap:wrap; }
+.gallery-item { position: relative; display:inline-block; }
+.gallery-item img { max-width:200px; max-height:160px; display:block; border:1px solid var(--border); border-radius:6px; }
+.img-delete-btn { position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.6); color:#fff; border:none; border-radius:50%; width:28px; height:28px; cursor:pointer; }
+.img-delete-btn:hover { background:rgba(0,0,0,0.8); }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.img-delete-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (!confirm('هل أنت متأكد أنك تريد حذف هذه الصورة؟')) return;
+      var imageId = btn.getAttribute('data-image-id');
+      var deleteUrl = btn.getAttribute('data-delete-url');
+      fetch(deleteUrl, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+      }).then(function (resp) {
+        if (!resp.ok) throw new Error('Network response was not ok');
+        return resp.json().catch(function () { return { success: true }; });
+      }).then(function (data) {
+        // remove the DOM node
+        var node = document.querySelector('.gallery-item[data-image-id="' + imageId + '"]');
+        if (node) node.remove();
+      }).catch(function (err) {
+        alert('حصل خطأ أثناء حذف الصورة. الرجاء المحاولة لاحقًا.');
+        console.error(err);
+      });
+    });
+  });
+});
+</script>
+
+<script>
+// تحميل: bundles this product's images + a specs.txt into a .zip.
+//
+// Desktop (pywebview): hands the bytes to pywebview's native Save dialog
+// (see run.py's AppAPI.export_product_package) - no Flask response
+// involved, so the WebView can't show a blank page instead of saving.
+//
+// Browser (no pywebview bridge, e.g. opened over LAN): falls back to a
+// normal HTTP download via GET /products/<id>/download
+// (app/routes/products.py), which triggers the browser's own download
+// manager exactly as any other file link would.
+//
+// Both paths package identical content - see
+// app/services/products.py:build_product_package_zip() - so this button
+// never asks the user to choose between "desktop" and "browser" downloads;
+// it just picks whichever mechanism is actually available.
+(function () {
+  var button = document.getElementById("downloadProductButton");
+  if (!button) return;
+
+  var downloadUrl = "{{ url_for('products.download_package', product_id=product.id) }}";
+
+  button.addEventListener("click", function () {
+    var hasDesktopApi = window.pywebview && window.pywebview.api && window.pywebview.api.export_product_package;
+
+    if (!hasDesktopApi) {
+      // Plain browser download - a real link click lets the browser's
+      // own download manager handle it (progress, save location, etc.)
+      // instead of us trying to reimplement that with fetch/blob.
+      window.location.href = downloadUrl;
+      return;
+    }
+
+    button.disabled = true;
+    var originalText = button.textContent;
+    button.textContent = "جارِ التحميل...";
+    window.pywebview.api.export_product_package({{ product.id }})
+      .then(function (res) {
+        if (!res.ok) alert(res.message);
+      })
+      .catch(function (err) {
+        alert("حصل خطأ أثناء التحميل.");
+        console.error(err);
+      })
+      .finally(function () {
+        button.disabled = false;
+        button.textContent = originalText;
+      });
+  });
+})();
+</script>
+
+<script>
+// حذف المنتج: soft-deletes via POST /products/<id>/delete (sets
+// is_active = 0 - sales history is untouched, see app/db.py schema).
+// Same confirm + async fetch pattern as the image delete above, except
+// on success the whole page is gone so we redirect to the dashboard
+// instead of removing a DOM node.
+(function () {
+  var button = document.getElementById("deleteProductButton");
+  if (!button) return;
+
+  var deleteUrl = "{{ url_for('products.delete', product_id=product.id) }}";
+  var productName = {{ product.name|tojson }};
+
+  button.addEventListener("click", function () {
+    if (!confirm("هل أنت متأكد أنك تريد حذف \"" + productName + "\"؟")) return;
+
+    button.disabled = true;
+    var originalText = button.textContent;
+    button.textContent = "جارِ الحذف...";
+
+    fetch(deleteUrl, {
+      method: "POST",
+      headers: { "Accept": "application/json" },
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("Network response was not ok");
+        return resp.json();
+      })
+      .then(function (data) {
+        if (!data.success) throw new Error(data.message || "Delete failed");
+        window.location.href = "{{ url_for('dashboard.index') }}";
+      })
+      .catch(function (err) {
+        alert("حصل خطأ أثناء حذف المنتج. الرجاء المحاولة لاحقًا.");
+        console.error(err);
+        button.disabled = false;
+        button.textContent = originalText;
+      });
+  });
+})();
+</script>
+
+{% endblock %}

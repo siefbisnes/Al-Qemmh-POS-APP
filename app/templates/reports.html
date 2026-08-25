@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}التقارير — القمة{% endblock %}
+{% block content %}
+{% if is_admin %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/reports_analytics.css') }}">
+{% endif %}
+
+<div class="page-header">
+  <h1>التقارير</h1>
+  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    <form method="post" action="{{ url_for('reports.clear') }}" style="margin:0;">
+      <button type="submit" class="btn btn-danger" onclick="return confirm('إعادة ضبط إجماليات التقارير إلى الصفر من الآن فصاعدًا؟ لن يتم حذف أي شيء.');">إعادة ضبط التقارير</button>
+    </form>
+    <button type="button" class="btn" id="toggleAdjustForm">＋ إضافة/خصم يدوي</button>
+  </div>
+</div>
+
+<form class="toolbar" method="get">
+  <div class="field" style="margin:0;"><label>من</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+  <div class="field" style="margin:0;"><label>إلى</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+  <button type="submit" class="btn" style="align-self:flex-end;">تطبيق</button>
+  {% if date_from or date_to %}
+  <a href="{{ url_for('reports.index') }}" class="btn btn-sm" style="align-self:flex-end;">مسح التصفية</a>
+  {% endif %}
+</form>
+
+<div class="panel" id="adjustPanel" style="display:none;" dir="rtl">
+  <h2>إضافة / خصم يدوي</h2>
+  <form method="post" action="{{ url_for('reports.adjust') }}" class="form-grid">
+    <div class="field">
+      <label>الهدف</label>
+      <select name="target" required>
+        {% for key, label in adjustment_targets %}
+        <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>النوع</label>
+      <select name="kind">
+        <option value="add">إضافة</option>
+        <option value="remove">خصم</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>المبلغ</label>
+      <input type="number" step="0.01" min="0.01" name="amount" required>
+    </div>
+    <div class="field">
+      <label>ملاحظة</label>
+      <input type="text" name="note" placeholder="اختياري">
+    </div>
+    <div class="field" style="align-self:end;">
+      <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+  </form>
+</div>
+
+{% if reset_at and not date_from %}
+<p class="hint">عرض الإجماليات منذ آخر إعادة ضبط ({{ reset_at[:16] }}).</p>
+{% endif %}
+
+<div class="stat-grid" dir="rtl">
+  <div class="stat-card">
+    <div class="label">الدرج</div>
+    <div class="value">{{ drawer|money }}</div>
+    <button type="button" class="btn btn-sm" id="toggleReportsDetails" style="margin-top:1rem;">التفاصيل</button>
+  </div>
+  <div class="stat-card"><div class="label">اليوم</div><div class="value">{{ today_total|money }}</div></div>
+  <div class="stat-card"><div class="label">أونلاين</div><div class="value">{{ range_summary.online|money }}</div></div>
+</div>
+
+<div id="reportsDetailsCard" class="panel" style="display:none; margin-top:1rem;" dir="rtl">
+  <div class="stat-grid">
+    <div class="stat-card"><div class="label">المصاريف</div><div class="value">{{ range_summary.expenses|money }}</div></div>
+    <div class="stat-card">
+      <div class="label">صافي الربح</div>
+      <div class="value">{{ range_summary.net_profit|money }}</div>
+      <div class="secondary-value">
+        {% if range_summary.outstanding_debt > 0.01 %}
+          <div class="secondary-value-main">≈ {{ range_summary.potential_net_profit|money }}</div>
+          <div class="secondary-value-label">بعد تحصيل المديونيات</div>
+        {% else %}
+          <div class="secondary-value-main">✓</div>
+          <div class="secondary-value-label">تم تحصيل كل المديونيات</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if is_admin %}
+<section class="reports-analytics" id="reportsAnalytics">
+  <div class="ra-head">
+    <h2>التحليلات</h2>
+    <div class="ra-toolbar">
+      <div class="ra-tabs" role="tablist" aria-label="الفترة الزمنية">
+        <button type="button" class="ra-tab" data-timeframe="weekly" role="tab">أسبوعي</button>
+        <button type="button" class="ra-tab" data-timeframe="monthly" role="tab">شهري</button>
+        <button type="button" class="ra-tab is-active" data-timeframe="6months" role="tab">٦ أشهر</button>
+        <button type="button" class="ra-tab" data-timeframe="yearly" role="tab">سنوي</button>
+      </div>
+      <button type="button" class="ra-privacy-btn" id="raPrivacyBtn" aria-pressed="false" title="إخفاء الأرقام الحساسة">
+        <span aria-hidden="true">👁</span>
+        <span class="ra-privacy-label">إخفاء الأرقام</span>
+      </button>
+      <button type="button" class="btn btn-sm" id="toggleAnalytics">إخفاء التحليلات</button>
+    </div>
+  </div>
+
+  <div id="raBody">
+    <div class="ra-status" id="raStatus" role="alert"></div>
+
+    <div class="ra-kpi-grid">
+      <article class="ra-kpi">
+        <div class="label">صافي الربح</div>
+        <div class="value sensitive" id="raKpiProfit">—</div>
+        <div class="ra-kpi-secondary" id="raKpiProfitSecondary"></div>
+      </article>
+      <article class="ra-kpi">
+        <div class="label">المشتريات</div>
+        <div class="value sensitive" id="raKpiPurchases">—</div>
+        <div class="hint">إجمالي جدول المشتريات خلال الفترة</div>
+      </article>
+      <article class="ra-kpi">
+        <div class="label">سيولة معرضة للخطر</div>
+        <div class="value sensitive" id="raKpiAtRisk">—</div>
+        <div class="hint">
+          راكد: <span class="sensitive" id="raKpiStagnantHint">—</span>
+          · هالك: <span class="sensitive" id="raKpiDamagedHint">—</span>
+        </div>
+      </article>
+    </div>
+
+    <div class="ra-charts">
+      <article class="ra-chart-card">
+        <div class="ra-chart-head">
+          <h3>اتجاه الربح والإيرادات</h3>
+          <span>Net Profit vs Revenue</span>
+        </div>
+        <div class="ra-chart-wrap tall">
+          <canvas id="chartProfitRevenue" aria-label="Profit and revenue chart"></canvas>
+        </div>
+      </article>
+
+      <article class="ra-chart-card">
+        <div class="ra-chart-head">
+          <h3>مشتريات المخزون مقابل العائد المتوقع</h3>
+          <span>Cost vs expected sell value</span>
+        </div>
+        <div class="ra-chart-wrap tall">
+          <canvas id="chartPurchases" aria-label="Purchases vs expected returns chart"></canvas>
+        </div>
+      </article>
+
+      <article class="ra-chart-card">
+        <div class="ra-chart-head">
+          <h3>المخزون الراكد والهالك</h3>
+          <span>راكد + هالك في نظرة واحدة</span>
+        </div>
+        <div class="ra-chart-wrap stack">
+          <canvas id="chartStockAtRisk" aria-label="Combined stagnant and write-off stock chart"></canvas>
+        </div>
+        <p class="ra-chart-total">
+          إجمالي السيولة المعرضة للخطر: <strong id="raChartAtRiskTotal" class="sensitive">—</strong>
+        </p>
+      </article>
+    </div>
+
+    <p class="ra-meta" id="raMeta"></p>
+  </div>
+</section>
+{% endif %}
+
+<div class="page-header" style="margin-top:2rem;"><h2>السجل</h2></div>
+<table class="data-table">
+  <tr><th>التاريخ والوقت</th><th>النوع</th><th>التفاصيل</th><th>الصادر</th><th>الوارد</th><th>إجراءات</th></tr>
+  {% for e in ledger_entries if e.type != 'purchase' or show_purchase_price %}
+  <tr>
+    <td>{{ e.date[:16] }}</td>
+    <td>
+      {% if e.type == 'sale' %}<span class="badge badge-grade-a">بيع</span>
+      {% elif e.type == 'purchase' %}<span class="badge badge-grade-c">مشتريات</span>
+      {% elif e.type == 'expense' %}<span class="badge badge-grade-b">مصروف</span>
+      {% elif e.type == 'writeoff' %}<span class="badge badge-muted">هالك</span>
+      {% else %}<span class="badge badge-muted">تعديل</span>{% endif %}
+    </td>
+    <td>{{ e.description }}</td>
+    <td>{{ e.debit|money if e.debit else '' }}</td>
+    <td>{{ e.credit|money if e.credit else '' }}</td>
+    <td class="action-cell">
+      <form method="post" action="{{ url_for('reports.delete_ledger_entry', entry_type=e.type, entry_id=e.id) }}"
+            onsubmit="return confirm('هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء.');">
+        <button type="submit" class="btn btn-sm btn-danger">حذف</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6">لا توجد معاملات في هذه الفترة.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const toggle = document.getElementById('toggleReportsDetails');
+    const card = document.getElementById('reportsDetailsCard');
+    if (toggle && card) {
+      toggle.addEventListener('click', function () {
+        card.style.display = card.style.display === 'none' ? '' : 'none';
+      });
+    }
+
+    const adjustToggle = document.getElementById('toggleAdjustForm');
+    const panel = document.getElementById('adjustPanel');
+    if (adjustToggle && panel) {
+      adjustToggle.addEventListener('click', () => {
+        panel.style.display = panel.style.display === 'none' ? '' : 'none';
+      });
+    }
+  });
+</script>
+{% if is_admin %}
+<script>
+  window.REPORTS_ANALYTICS_CONFIG = {
+    apiUrl: {{ url_for('reports.analytics_api') | tojson }},
+    defaultTimeframe: {{ default_timeframe | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/reports_analytics.js') }}"></script>
+{% endif %}
+{% endblock %}

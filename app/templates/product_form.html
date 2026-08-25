@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ 'تعديل المنتج' if product else 'إضافة منتج' }} — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>{{ 'تعديل المنتج' if product else 'إضافة منتج' }}</h1>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="panel" id="productForm">
+  <div class="form-grid">
+    <div class="field">
+      <label>القسم</label>
+      <select name="category_id" id="categorySelect" required>
+        <option value="">اختر قسمًا…</option>
+        {% for c in categories %}
+          <option value="{{ c.id }}" {{ 'selected' if product and product.category_id == c.id }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>الاسم/الموديل</label>
+      <input type="text" name="name" required value="{{ product.name if product else (form.name if form else '') }}" placeholder="مثال: EliteDisplay E243">
+    </div>
+    <div class="field">
+      <label>الدرجة</label>
+      <select name="grade">
+        {% for g in ['A', 'B', 'C'] %}
+          <option value="{{ g }}" {{ 'selected' if (product and product.grade == g) }}>{{ g }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>الكمية</label>
+      <input type="number" name="quantity" min="0" value="{{ product.quantity if product else 0 }}">
+    </div>
+    {% if show_purchase_price %}
+    <div class="field">
+      <label>سعر الشراء (ج.م)</label>
+      <input type="number" step="0.01" name="purchase_price" value="{{ product.purchase_price if product else '' }}">
+    </div>
+    {% else %}
+    <div class="field">
+      <label>سعر الشراء (ج.م)</label>
+      <input type="number" step="0.01" name="purchase_price" value=""
+             {% if product %}placeholder="اتركه فارغًا للإبقاء على السعر الحالي كما هو"{% endif %}>
+    </div>
+    {% endif %}
+    <div class="field">
+      <label>سعر البيع (ج.م)</label>
+      <input type="number" step="0.01" name="selling_price" value="{{ product.selling_price if product else '' }}">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>الوصف</label>
+    <textarea name="description">{{ product.description if product else '' }}</textarea>
+  </div>
+
+  <h2>المواصفات</h2>
+  <p class="subtitle">تظهر تلقائيًا بناءً على القسم المختار أعلاه.</p>
+  {% for c in categories %}
+    <div data-category-fields="{{ c.id }}" style="display:none;">
+      <div class="form-grid">
+        {% for f in c.fields %}
+          <div class="field">
+            <label>{{ f.field_label }}{{ ' *' if f.is_required }}</label>
+            {% if f.field_type == 'select' and f.field_options %}
+              <select name="spec_{{ f.id }}">
+                <option value="">—</option>
+                {% for opt in f.field_options %}
+                  <option value="{{ opt }}" {{ 'selected' if current_specs and current_specs.get(f.id) == opt }}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+            {% elif f.field_type == 'textarea' %}
+              <textarea name="spec_{{ f.id }}">{{ current_specs.get(f.id, '') if current_specs else '' }}</textarea>
+            {% elif f.field_type == 'number' %}
+              <input type="number" name="spec_{{ f.id }}" value="{{ current_specs.get(f.id, '') if current_specs else '' }}">
+            {% else %}
+              <input type="text" name="spec_{{ f.id }}" value="{{ current_specs.get(f.id, '') if current_specs else '' }}">
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+
+  {% if not product %}
+    <div class="field">
+      <label>الصور</label>
+      <input type="file" name="images" accept="image/*" multiple>
+    </div>
+  {% endif %}
+
+  <button type="submit" class="btn btn-primary">{{ 'حفظ التغييرات' if product else 'إضافة منتج' }}</button>
+  <a href="{{ url_for('dashboard.index') if not product else url_for('products.detail', product_id=product.id) }}" class="btn">إلغاء</a>
+</form>
+
+{% if not product %}
+<div class="modal-overlay" id="quantityConfirmModal" hidden>
+  <div class="modal-box">
+    <p>نسيت تحط كميه لل منتج؟</p>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="quantityConfirmNo">لا</button>
+      <button type="button" class="btn btn-primary" id="quantityConfirmYes">نعم</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if not product %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var form = document.getElementById("productForm");
+    var quantityInput = form.querySelector('input[name="quantity"]');
+    var modal = document.getElementById("quantityConfirmModal");
+    var noBtn = document.getElementById("quantityConfirmNo");
+    var yesBtn = document.getElementById("quantityConfirmYes");
+    var confirmed = false;
+
+    form.addEventListener("submit", function (e) {
+      if (confirmed) return; // user already answered نعم - let this one through
+      var val = (quantityInput.value || "").trim();
+      if (val === "" || parseInt(val, 10) === 0) {
+        e.preventDefault();
+        modal.hidden = false;
+      }
+    });
+
+    noBtn.addEventListener("click", function () {
+      modal.hidden = true;
+      quantityInput.focus();
+    });
+
+    yesBtn.addEventListener("click", function () {
+      confirmed = true;
+      modal.hidden = true;
+      form.submit();
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

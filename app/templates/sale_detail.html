@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}تفاصيل البيع — القمة{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>العميل: {{ sale.customer_name or 'عميل عابر' }}</h1>
+    <p class="subtitle">الهاتف: {{ sale.customer_phone or '—' }}</p>
+  </div>
+  <form method="post" action="{{ url_for('sales.void', sale_id=sale.id) }}"
+        onsubmit="return confirm('هل أنت متأكد أنك تريد مرتجع هذا البيع؟ سيتم إرجاع المخزون والضمان.');">
+    <button type="submit" class="btn btn-danger">مرتجع هذا البيع</button>
+  </form>
+</div>
+<div class="form-grid">
+  <div>
+    <div class="panel">
+      <h2>{{ sale.product_name }}</h2>
+      {% if sale.images %}
+        <div class="gallery">
+          {% for img in sale.images %}
+            <img src="{{ url_for('media.product_image', filename=img.filepath) }}" alt="">
+          {% endfor %}
+        </div>
+      {% endif %}
+      <table class="data-table spec-table">
+        <tr><td>الكمية المباعة</td><td>{{ sale.quantity }}</td></tr>
+        <tr><td>سعر البيع</td><td>{{ sale.selling_price|money }}</td></tr>
+        <tr><td>تاريخ البيع</td><td>{{ sale.sale_date[:16] }}</td></tr>
+        {% if sale.warranty %}
+          <tr><td>الضمان حتى</td><td>{{ sale.warranty.expiration_date[:10] }}</td></tr>
+        {% endif %}
+        {% for s in sale.specifications %}
+          <tr><td>{{ s.field_label }}</td><td>{{ s.value }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>{% if sale.transaction_lines|length > 1 %}المنتجات في نفس المعاملة{% else %}هذا المنتج{% endif %}</h2>
+      <p class="hint">اختر الكمية المطلوب حذفها لكل منتج، ثم اضغط حذف. سيتم إرجاع الكمية المحذوفة إلى المخزون.</p>
+      <table class="data-table">
+        <tr><th>المنتج</th><th>الكمية</th><th>السعر</th><th>حذف</th></tr>
+        {% for line in sale.transaction_lines %}
+          <tr {{ 'style=font-weight:600' if line.id == sale.id }}>
+            <td><a href="{{ url_for('sales.detail', sale_id=line.id) }}">{{ line.service_description or line.product_name }}</a></td>
+            <td>{{ line.quantity }}</td>
+            <td>{{ line.selling_price|money }}</td>
+            <td class="action-cell">
+              <form method="post" action="{{ url_for('sales.delete_line', sale_id=line.id) }}"
+                    class="inline-form" style="display:flex; gap:.4rem; align-items:center;"
+                    onsubmit="return confirm('هل أنت متأكد من حذف هذه الكمية؟ سيتم إرجاعها للمخزون ولا يمكن التراجع عن هذا الإجراء.');">
+                <input type="number" name="quantity" min="1" max="{{ line.quantity }}" value="{{ line.quantity }}"
+                       style="width:64px;" required>
+                <button type="submit" class="btn btn-sm btn-danger">حذف</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+      {% if sale.transaction_id %}
+        <a href="{{ url_for('sales.transaction_detail', transaction_id=sale.transaction_id) }}" class="btn btn-sm" style="margin-top:.6rem;">عرض الإيصال الكامل</a>
+      {% endif %}
+    </div>
+  </div>
+  <div>
+    <div class="panel">
+      <h2>سجل المشتريات</h2>
+      {% if sale.history %}
+        <table class="data-table">
+          <tr><th>التاريخ</th><th>المنتج</th><th>الكمية</th><th>السعر</th></tr>
+          {% for h in sale.history %}
+            <tr>
+              <td>{{ h.sale_date[:10] }}</td>
+              <td><a href="{{ url_for('sales.detail', sale_id=h.id) }}">{{ h.product_name }}</a></td>
+              <td>{{ h.quantity }}</td>
+              <td>{{ h.selling_price|money }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p class="subtitle">لا توجد مشتريات أخرى مسجلة لهذا العميل.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

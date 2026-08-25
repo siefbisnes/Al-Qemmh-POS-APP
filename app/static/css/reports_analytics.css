@@ -1,0 +1,240 @@
+/* Admin-only analytics block embedded in the Reports page.
+   Uses the app's global design tokens (see style.css :root and
+   [data-theme="dark"]) instead of its own hardcoded colors, so it
+   switches with the rest of the UI automatically - nothing here needs
+   its own light/dark branch. */
+.reports-analytics {
+  color: var(--text);
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.reports-analytics * { box-sizing: border-box; }
+
+.ra-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.ra-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ra-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ra-tabs {
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  gap: 0.15rem;
+}
+
+.ra-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ra-tab:hover { color: var(--text); }
+.ra-tab.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ra-privacy-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ra-privacy-btn[aria-pressed="true"] {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.ra-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.15rem;
+}
+
+.ra-kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  min-height: 96px;
+  box-shadow: var(--shadow-card);
+}
+
+.ra-kpi .label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin-bottom: 0.45rem;
+  font-weight: 600;
+}
+
+.ra-kpi .value {
+  font-size: clamp(1.1rem, 2.4vw, 1.4rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.ra-kpi .hint {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.ra-kpi-secondary {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.ra-kpi-secondary .potential-value {
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 0.2rem;
+}
+
+.ra-charts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.ra-chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.15rem 1rem;
+  box-shadow: var(--shadow-card);
+}
+
+.ra-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ra-chart-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ra-chart-head span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.ra-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 280px;
+}
+
+.ra-chart-wrap.tall { height: 300px; }
+.ra-chart-wrap.stack { height: 220px; }
+
+.ra-chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.ra-chart-total {
+  margin: 0.85rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.ra-chart-total strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.ra-status {
+  display: none;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.ra-status.is-on { display: block; }
+
+.reports-analytics.ra-loading #raBody {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.ra-meta {
+  margin-top: 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.reports-analytics.privacy-on .ra-kpi .value,
+.reports-analytics.privacy-on .sensitive {
+  filter: blur(6px);
+  user-select: none;
+}
+
+@media (max-width: 960px) {
+  .ra-chart-wrap { height: 240px; }
+}
+
+@media (max-width: 560px) {
+  .ra-tabs { width: 100%; overflow-x: auto; }
+  .ra-tab { flex: 1 0 auto; text-align: center; }
+  .ra-kpi { min-height: 84px; padding: 0.85rem; }
+}

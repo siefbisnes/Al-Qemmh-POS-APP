@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}المصروفات والمشتريات — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>المصروفات والمشتريات</h1>
+    <p class="subtitle"></p>
+  </div>
+</div>
+
+<form method="post" class="panel">
+  <div class="toggle-pill-group">
+    <input type="radio" id="entry_type_purchase" name="entry_type" value="purchase" checked>
+    <label for="entry_type_purchase">مشتريات</label>
+    <input type="radio" id="entry_type_expense" name="entry_type" value="expense">
+    <label for="entry_type_expense">مصروفات</label>
+  </div>
+
+  <div class="form-grid">
+    <div class="field">
+      <label id="descriptionLabel">الاسم / الوصف</label>
+      <input type="text" id="descriptionField" name="description"
+             placeholder="مثال: إيجار المتجر أو كابلات HDMI" required>
+    </div>
+    <div class="field">
+      <label>المبلغ (ج.م)</label>
+      <input type="number" step="0.01" name="amount" required>
+    </div>
+    <div class="field">
+      <label>طريقة الدفع</label>
+      <select name="payment_method">
+        {% for value, label in payment_methods %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>التاريخ</label>
+      <input type="date" name="date">
+      <span class="hint">اتركه فارغًا لاستخدام اليوم.</span>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary">إضافة</button>
+</form>
+
+<form class="toolbar" method="get">
+  <div class="field" style="margin:0;"><label>من</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+  <div class="field" style="margin:0;"><label>إلى</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+  <button type="submit" class="btn" style="align-self:flex-end;">تصفية</button>
+</form>
+
+<div class="stat-grid">
+  {% if show_purchase_price %}
+  <div class="stat-card"><div class="label">إجمالي المشتريات</div><div class="value">{{ total_purchases|money }}</div></div>
+  {% endif %}
+  <div class="stat-card"><div class="label">إجمالي المصروفات</div><div class="value">{{ total_expenses|money }}</div></div>
+  <div class="stat-card"><div class="label">أونلاين</div><div class="value">{{ online_outflow|money }}</div></div>
+</div>
+
+{% set visible_records = records if show_purchase_price else records|rejectattr('type', 'equalto', 'purchase')|list %}
+{% if visible_records %}
+<table class="data-table">
+  <tr><th>التاريخ</th><th>النوع</th><th>الوصف</th><th>المبلغ</th><th>طريقة الدفع</th><th></th></tr>
+  {% for r in visible_records %}
+    <tr>
+      <td>{{ r.date[:16] if r.date else '-' }}</td>
+      <td>{{ r.label }}</td>
+      <td>{{ r.description }}</td>
+      <td>{{ r.amount|money }}</td>
+      <td>
+        {% if r.payment_method %}
+          {% for value,label in payment_methods %}
+            {% if value == r.payment_method %}{{ label }}{% endif %}
+          {% endfor %}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>
+        <form method="post"
+              action="{{ url_for('purchases.delete', purchase_id=r.id) if r.type == 'purchase' else url_for('expenses.delete', expense_id=r.id) }}"
+              onsubmit="return confirm('هل تريد حذف هذا السجل؟');">
+          <button type="submit" class="btn btn-sm btn-danger">مرتجع</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty-state"><h3>لا توجد سجلات مصروفات أو مشتريات في هذه الفترة.</h3></div>
+{% endif %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const purchaseRadio = document.getElementById('entry_type_purchase');
+    const expenseRadio = document.getElementById('entry_type_expense');
+    const descriptionLabel = document.getElementById('descriptionLabel');
+    const descriptionField = document.getElementById('descriptionField');
+    const purchaseOnlyFields = document.querySelectorAll('.purchase-only');
+
+    function updateType() {
+      const isPurchase = purchaseRadio.checked;
+      purchaseOnlyFields.forEach(el => el.style.display = isPurchase ? '' : 'none');
+      descriptionLabel.textContent = isPurchase ? 'اسم المشتريات' : 'الوصف';
+      descriptionField.placeholder = isPurchase ? 'مثال: إيجار المتجر أو كابلات HDMI' : 'مثال: إيجار المتجر أو فاتورة الكهرباء';
+    }
+
+    purchaseRadio.addEventListener('change', updateType);
+    expenseRadio.addEventListener('change', updateType);
+    updateType();
+  });
+</script>
+{% endblock %}
+
+{% endblock %}

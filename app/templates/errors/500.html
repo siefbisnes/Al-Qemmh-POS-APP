@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}>حدث خطأ — القمة{% endblock %}
+{% block content %}
+<div class="empty-state">
+  <h1>حدث خطأ غير متوقع</h1>
+  <p>حدث خطأ غير متوقع. لم تتغير بياناتك. راجع ملف instance/app.log للتفاصيل.</p>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">العودة إلى لوحة التحكم</a>
+</div>
+{% endblock %}

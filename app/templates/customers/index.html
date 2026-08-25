@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}العملاء - Al-Qemma{% endblock %}
+{% block content %}
+
+<div class="page-header" dir="rtl">
+  <h1>العملاء</h1>
+</div>
+
+<form class="toolbar" method="get" dir="rtl">
+  <div class="field" style="margin:0;">
+    <label>بحث</label>
+    <input type="search" name="q" value="{{ search or '' }}" placeholder="ابحث باسم العميل أو رقم الهاتف أو المنتج أو المبلغ" />
+  </div>
+  <div class="field" style="margin:0;">
+    <label>الفلتر</label>
+    <select name="filter">
+      <option value="" {{ 'selected' if not filter_value }}>الكل</option>
+      <option value="debtors" {{ 'selected' if filter_value == 'debtors' }}>مديونين</option>
+    </select>
+  </div>
+  <button type="submit" class="btn" style="align-self:flex-end;">تطبيق</button>
+</form>
+
+{% if customers %}
+<table class="data-table" dir="rtl">
+  <tr>
+    <th>اسم العميل</th>
+    <th>رقم الهاتف</th>
+    <th>آخر عملية شراء</th>
+    <th>آخر إجمالي</th>
+  </tr>
+  {% for customer in customers %}
+  <tr>
+    <td><a href="{{ url_for('customers.detail', customer_id=customer.id) }}">{{ customer.customer_name or '—' }}</a></td>
+    <td>{{ customer.customer_phone or '—' }}</td>
+    <td>{{ customer.latest_purchase_date[:16] }}</td>
+    <td>{{ customer.last_purchase_total|money }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty-state" dir="rtl">
+  <h3>لا توجد بيانات عملاء مطابقة.</h3>
+</div>
+{% endif %}
+
+{% endblock %}

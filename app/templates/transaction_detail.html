@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}تم إكمال البيع — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>{{ txn.receipt_number }}</h1>
+    <p class="subtitle">
+      العميل: {% if txn.customer_id and txn.customer_name %}<a href="{{ url_for('customers.detail', customer_id=txn.customer_id) }}">{{ txn.customer_name }}</a>{% else %}{{ txn.customer_name or 'عميل عابر' }}{% endif %}
+      · {{ txn.customer_phone or '—' }}
+      · {{ txn.created_at[:16] }}
+    </p>
+  </div>
+  <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+    <button type="button" class="btn btn-primary" id="printReceiptBtn">طباعة الإيصال</button>
+    <a href="{{ url_for('sales.receipt_pdf', transaction_id=txn.id) }}" class="btn" id="downloadPdfBtn">تنزيل الإيصال (PDF)</a>
+    <a href="{{ url_for('sales.receipt_excel', transaction_id=txn.id) }}" class="btn" id="downloadExcelBtn">تنزيل الإيصال (Excel)</a>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>الأصناف</h2>
+  <table class="data-table">
+    <tr><th>المنتج / الخدمة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي الفرعي</th></tr>
+    {% for line in txn.lines %}
+      <tr>
+        <td><a href="{{ url_for('sales.detail', sale_id=line.id) }}">{{ line.service_description or line.product_name }}</a></td>
+        <td>{{ line.quantity }}</td>
+        <td>{{ line.selling_price|money }}</td>
+        <td>{{ (line.selling_price * line.quantity)|money }}</td>
+      </tr>
+    {% endfor %}
+    <tr style="font-weight:700;"><td colspan="3">الإجمالي الكلي</td><td>{{ txn.total|money }}</td></tr>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>الدفع</h2>
+  {% if txn.payments %}
+  <table class="data-table">
+    <tr><th>طريقة الدفع</th><th>المبلغ</th><th>التاريخ</th></tr>
+    {% for p in txn.payments %}
+      <tr>
+        <td>{{ payment_labels.get(p.method, p.method) }}</td>
+        <td>{{ p.amount|money }}</td>
+        <td>{{ p.created_at[:16] if p.created_at else '—' }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+    <p class="subtitle">لا توجد دفعات مسجلة لهذا الإيصال.</p>
+  {% endif %}
+  <div style="display:flex; justify-content:space-between; margin-top:.9rem; padding-top:.9rem; border-top:1px solid var(--border); font-weight:700;">
+    <span>إجمالي المدفوع</span><span>{{ txn.paid|money }}</span>
+  </div>
+  {% if txn.remaining > 0.009 %}
+    <div style="display:flex; justify-content:space-between; margin-top:.4rem; color:var(--danger); font-weight:700;">
+      <span>المتبقي</span><span>{{ txn.remaining|money }}</span>
+    </div>
+  {% endif %}
+</div>
+
+<a href="{{ url_for('sales.new') }}" class="btn">بدء بيع آخر</a>
+<a href="{{ url_for('dashboard.index') }}" class="btn">العودة إلى لوحة التحكم</a>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var txnId = {{ txn.id }};
+  var pdfHref = document.getElementById("downloadPdfBtn").href;
+  var links = {
+    pdf: document.getElementById("downloadPdfBtn"),
+    excel: document.getElementById("downloadExcelBtn"),
+  };
+
+  // True only inside the pywebview desktop window - false when this same
+  // page is opened in a normal browser (e.g. over LAN/Tailscale), where
+  // the plain <a href> download already works fine and should be left
+  // alone.
+  function hasBridge(method) {
+    return !!(window.pywebview && window.pywebview.api && window.pywebview.api[method]);
+  }
+
+  // window.pywebview.api is injected ASYNCHRONOUSLY by the desktop shell
+  // (see the before_load / pywebviewready events in launcher.log) - it
+  // is not guaranteed to exist yet the instant this script runs. Calling
+  // hasBridge() before it's ready wrongly looks like "plain browser" and
+  // falls back to navigating this same window straight to the raw PDF
+  // response, which pywebview's WebView has no download manager for - it
+  // just renders the PDF inline and traps the user with no way back.
+  // This waits for the real readiness signal (with a short timeout as a
+  // safety net in case this page is ever loaded outside pywebview and
+  // that event never fires) before anything is allowed to run.
+  var bridgeSettled = !!(window.pywebview && window.pywebview.api);
+  function whenBridgeSettled(callback) {
+    if (bridgeSettled) { callback(); return; }
+    var fallbackTimer = setTimeout(function () {
+      bridgeSettled = true;
+      callback();
+    }, 1000);
+    window.addEventListener("pywebviewready", function () {
+      clearTimeout(fallbackTimer);
+      bridgeSettled = true;
+      callback();
+    }, { once: true });
+  }
+
+  function triggerDownload(fmt) {
+    var link = links[fmt];
+    if (hasBridge("save_receipt")) {
+      window.pywebview.api.save_receipt(txnId, fmt)
+        .then(function (result) {
+          if (result && result.message) alert(result.message);
+        })
+        .catch(function () {
+          alert("تعذر حفظ الإيصال.");
+        });
+    } else if (link) {
+      window.location.href = link.href;
+    }
+  }
+
+  ["pdf", "excel"].forEach(function (fmt) {
+    var link = links[fmt];
+    if (!link) return;
+    link.addEventListener("click", function (e) {
+      // Always prevent the default navigation first - if this turns out
+      // to be a plain browser (no bridge), triggerDownload() below falls
+      // back to window.location.href itself, so nothing is lost by
+      // waiting a moment to find out which case this is.
+      e.preventDefault();
+      whenBridgeSettled(function () {
+        triggerDownload(fmt);
+      });
+    });
+  });
+
+  // "طباعة الإيصال" no longer navigates this window anywhere - this app
+  // is a single WebView window with no back button, so sending it to a
+  // receipt page used to trap the user there. Inside the desktop app it
+  // now opens the same native Save dialog as the PDF button, then makes
+  // one silent best-effort attempt to send that file to the OS's
+  // default printer (see print_receipt in run.py) - nothing is shown to
+  // the user if there's no printer or the print itself fails, only the
+  // save result is reported. In a normal browser (no bridge), it just
+  // falls back to the plain PDF download, same as the PDF button there.
+  document.getElementById("printReceiptBtn").addEventListener("click", function (e) {
+    e.preventDefault();
+    whenBridgeSettled(function () {
+      if (hasBridge("print_receipt")) {
+        window.pywebview.api.print_receipt(txnId)
+          .then(function (result) {
+            if (result && result.message) alert(result.message);
+          })
+          .catch(function () {
+            alert("تعذر إنشاء الإيصال.");
+          });
+      } else {
+        window.location.href = pdfHref;
+      }
+    });
+  });
+
+  {% if auto_download == 'pdf' %}
+    whenBridgeSettled(function () { triggerDownload("pdf"); });
+  {% elif auto_download == 'excel' %}
+    whenBridgeSettled(function () { triggerDownload("excel"); });
+  {% endif %}
+})();
+</script>
+{% endblock %}

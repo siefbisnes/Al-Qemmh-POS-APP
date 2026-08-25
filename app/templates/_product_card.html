@@ -1,0 +1,25 @@
+<div class="product-card">
+  <a href="{{ url_for('products.detail', product_id=p.id) }}" class="thumb">
+    {% if p.thumbnail %}
+      <img src="{{ url_for('media.product_image', filename=p.thumbnail) }}" alt="{{ p.name }}">
+    {% else %}
+      <span class="placeholder">بدون صورة</span>
+    {% endif %}
+  </a>
+  <div class="body">
+    <div class="name"><a href="{{ url_for('products.detail', product_id=p.id) }}">{{ p.name }}</a></div>
+    <div class="meta-row">
+      <span class="badge badge-grade-{{ p.grade|lower }}">الدرجة {{ p.grade }}</span>
+      <span class="qty {{ 'low' if p.quantity <= 3 }}">{{ p.quantity }} في المخزون</span>
+    </div>
+    <div class="price-toggle-area">
+      <span class="price-value hidden-price" id="price-{{ p.id }}">{{ p.selling_price|money }}</span>
+      <button type="button" class="btn btn-sm" data-price-toggle="price-{{ p.id }}">إظهار السعر</button>
+    </div>
+    <form method="post" action="{{ url_for('products.delete', product_id=p.id) }}"
+          onsubmit="return confirm('هل أنت متأكد من حذف {{ p.name }}؟ سيتم إزالته من القائمة فقط، وستبقى كل المبيعات والتقارير المرتبطة به كما هي.');"
+          style="margin-top:.5rem;">
+      <button type="submit" class="btn btn-sm btn-danger">حذف</button>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Al-Qemma</title>
+<style>
+  :root {
+    --bg: #1E1E1E;
+    --card: #252526;
+    --accent: #3B82F6;
+    --danger: #F87171;
+    --text: #FFFFFF;
+    --subtext: #9CA3AF;
+    --border: #333333;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card {
+    width: 360px;
+    padding: 32px;
+  }
+
+  .mark {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    margin: 0 0 18px 0;
+    font-size: 24px;
+    color: var(--text);
+  }
+
+  .track {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  .fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width 0.35s ease;
+  }
+
+  .fill.failed {
+    background: var(--danger);
+  }
+
+  .status {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--subtext);
+  }
+
+  .status.failed {
+    color: var(--danger);
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="mark">&#128421;</div>
+    <h1>Connecting...</h1>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <div class="status" id="status">Initializing...</div>
+  </div>
+
+  <script>
+    // Called from Python (run.py's _report_step) via window.evaluate_js
+    // as each startup step completes. pct is 0-100, text is the
+    // human-readable step message (matches STARTUP_STEPS).
+    window.setStep = function (pct, text) {
+      document.getElementById("fill").style.width = pct + "%";
+      document.getElementById("status").textContent = text;
+    };
+
+    // Called from Python if startup fails - freezes the bar in red and
+    // shows the error instead of silently hanging on "Starting local
+    // server...".
+    window.setFailed = function (message) {
+      document.querySelector("h1").textContent = "Startup failed";
+      document.getElementById("fill").classList.add("failed");
+      var status = document.getElementById("status");
+      status.classList.add("failed");
+      status.textContent = message;
+    };
+  </script>
+
+</body>
+</html>

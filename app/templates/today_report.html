@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}تقرير اليوم — Al-Qemma{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>تقرير اليوم</h1>
+  <a href="{{ url_for('reports.today_export_pdf') }}" class="btn btn-primary">تحميل PDF</a>
+</div>
+
+<div dir="rtl" style="text-align:right;">
+  <p class="subtitle">{{ report.date }}</p>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="label">أونلاين</div><div class="value">{{ report.payments.online|money }}</div></div>
+    <div class="stat-card"><div class="label">نقدي</div><div class="value">{{ report.payments.cash|money }}</div></div>
+    <div class="stat-card"><div class="label">المصروفات</div><div class="value">{{ report.expenses_total|money }}</div></div>
+    <div class="stat-card"><div class="label">الدرج (نقدي - مصروفات)</div><div class="value">{{ report.drawer|money }}</div></div>
+    <div class="stat-card"><div class="label">الوحدات المباعة</div><div class="value">{{ report.units_sold }}</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>ماذا تم بيعه</h2>
+    {% if report.sold_summary %}
+      <table class="data-table">
+        <tr><th>الصنف</th><th>الكمية</th></tr>
+        {% for item in report.sold_summary %}
+          <tr><td>{{ item.product_name }}</td><td>{{ item.quantity }}</td></tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p>لا توجد مبيعات اليوم حتى الآن.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

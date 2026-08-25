@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ branding().shop_name }}{% endblock %}
+{% block content %}
+
+<div class="brand-page-shell">
+  <div class="brand-page">
+    <img class="brand-page-mark brand-page-mark-light" src="{{ url_for('static', filename='icons/logo-mark-light.png') }}" alt="{{ branding().shop_name }}">
+    <img class="brand-page-mark brand-page-mark-dark" src="{{ url_for('static', filename='icons/logo-mark-dark.png') }}" alt="{{ branding().shop_name }}">
+
+    {% if is_admin %}
+      <h1 style="font-size:2.75rem; margin-bottom:.35rem;">Welcome ahmed</h1>
+    {% else %}
+      <h1 style="font-size:2.75rem; margin-bottom:.35rem;">{{ branding().shop_name }}</h1>
+    {% endif %}
+    <p>{{ branding().tagline_en }} {{ branding().phone }}</p>
+    <p dir="rtl">{{ branding().tagline_ar }} {{ branding().phone }}</p>
+
+    {% if is_admin %}
+      <a href="{{ url_for('reports.index') }}" class="btn btn-primary">لوحة المالك</a>
+    {% else %}
+      <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">العودة إلى لوحة التحكم</a>
+    {% endif %}
+  </div>
+
+  <section class="floating-task-window" aria-labelledby="quickTasksTitle">
+    <div class="window-bar">
+      <div class="window-dots" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <h2 id="quickTasksTitle">مهام سريعة</h2>
+    </div>
+
+    <div class="task-grid">
+      <a href="{{ url_for('sales.new') }}" class="task-tile task-tile-primary">
+        <span class="task-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6 7h12M6 12h12M6 17h8M17 4v16" /></svg>
+        </span>
+        <span>البيع</span>
+      </a>
+      <a href="{{ url_for('dashboard.index') }}" class="task-tile">
+        <span class="task-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 13h7V4H4zM13 20h7V4h-7zM4 20h7v-5H4z" /></svg>
+        </span>
+        <span>المنتجات</span>
+      </a>
+      <a href="{{ url_for('reports.index') }}" class="task-tile">
+        <span class="task-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 19V5M9 19v-7M13 19V8M17 19v-4M21 19H3" /></svg>
+        </span>
+        <span>لوحة التحكم</span>
+      </a>
+      <a href="{{ url_for('products.new') }}" class="task-tile">
+        <span class="task-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+        </span>
+        <span>اضافة منتج</span>
+      </a>
+      <a href="{{ url_for('expenses.index') }}" class="task-tile">
+        <span class="task-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M7 7V5h10v2M6 7l1 12h10l1-12M10 11v4M14 11v4" /></svg>
+        </span>
+        <span>المصروفات</span>
+      </a>
+      <a href="{{ url_for('settings.index') }}" class="task-tile">
+        <span class="task-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path d="M19.4 13.5a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.04 1.56V19.6a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.04-1.56 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.56-1.04H2.4a2 2 0 110-4h.09a1.7 1.7 0 001.56-1.04 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H8.5a1.7 1.7 0 001.04-1.56V2.4a2 2 0 114 0v.09a1.7 1.7 0 001.04 1.56 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87v.09c.32.7.9 1.2 1.56 1.04h.09a2 2 0 110 4h-.09a1.7 1.7 0 00-1.56 1.04z" /></svg>
+        </span>
+        <span>الاعدادات</span>
+      </a>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

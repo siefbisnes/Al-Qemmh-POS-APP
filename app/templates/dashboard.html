@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}لوحة التحكم — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1>لوحة التحكم</h1>
+    <p class="subtitle">{{ products|length }} عنصر في العرض</p>
+  </div>
+  <a href="{{ url_for('products.new') }}" class="btn btn-primary">+ إضافة منتج</a>
+</div>
+
+<form class="toolbar" method="get">
+  <input type="text" name="q" placeholder="ابحث بالاسم أو الموديل…" value="{{ filters.q }}">
+  <select name="category">
+    <option value="">كل الأقسام</option>
+    {% for c in categories %}
+      <option value="{{ c.id }}" {{ 'selected' if filters.category == c.id }}>{{ c.name }}</option>
+    {% endfor %}
+  </select>
+  <select name="grade">
+    <option value="">كل الدرجات</option>
+    {% for g in ['A', 'B', 'C'] %}
+      <option value="{{ g }}" {{ 'selected' if filters.grade == g }}>الدرجة {{ g }}</option>
+    {% endfor %}
+  </select>
+  <label style="display:flex; align-items:center; gap:.4rem; font-size:.85rem;">
+    <input type="checkbox" name="low_stock" value="1" style="width:auto;" {{ 'checked' if filters.low_stock }}>
+    فقط المنتجات القليلة المخزون
+  </label>
+  <label style="display:flex; align-items:center; gap:.4rem; font-size:.85rem;">
+    <input type="checkbox" name="stagnant_60_days" value="1" style="width:auto;" {{ 'checked' if filters.stagnant_60_days }}>
+    منتجات أكثر من 60 يوم
+  </label>
+  <button type="submit" class="btn">تصفية</button>
+  {% if filters.q or filters.category or filters.grade or filters.low_stock or filters.stagnant_60_days %}
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-sm">إعادة تعيين</a>
+  {% endif %}
+</form>
+
+{% if products %}
+<div class="product-grid">
+  {% for p in products %}
+    {% include "partials/_product_card.html" %}
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <h3>لا توجد منتجات تطابق هذه التصفية.</h3>
+  <p>جرب حذف التصفية أو أضف أول منتج لك للبدء.</p>
+</div>
+{% endif %}
+
+{% if sold_products %}
+<div class="sold-section">
+  <h2 class="sold-heading">تم بيعها <span class="badge badge-muted">{{ sold_products|length }}</span></h2>
+  <p class="subtitle">تم نفاد المخزون. تمت إزالتها من المخزون النشط لكن تبقى هنا مع كامل السجل حتى يتم إعادة شحنها.</p>
+  <div class="product-grid">
+    {% for p in sold_products %}
+      <div class="product-card sold-card">
+        <a href="{{ url_for('products.detail', product_id=p.id) }}" class="thumb">
+          {% if p.thumbnail %}
+            <img src="{{ url_for('media.product_image', filename=p.thumbnail) }}" alt="{{ p.name }}">
+          {% else %}
+            <span class="placeholder">بدون صورة</span>
+          {% endif %}
+        </a>
+        <div class="body">
+          <div class="name"><a href="{{ url_for('products.detail', product_id=p.id) }}">{{ p.name }}</a></div>
+          <span class="badge badge-muted">نفدت الكمية</span>
+          <form method="post" action="{{ url_for('products.restore', product_id=p.id) }}" style="display:flex; gap:.4rem; margin-top:.4rem;">
+            <input type="number" name="quantity" min="1" value="1" style="width:70px;">
+            <button type="submit" class="btn btn-sm">إعادة تفعيل</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

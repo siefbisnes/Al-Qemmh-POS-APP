@@ -1,0 +1,129 @@
+# -*- mode: python ; coding: utf-8 -*-
+
+from PyInstaller.utils.hooks import collect_submodules
+
+
+# ============================================================
+# AlQemma - PyInstaller specification
+# ============================================================
+
+a = Analysis(
+    ['run.py'],
+
+    pathex=[],
+
+    binaries=[],
+
+    datas=[
+        # Flask templates
+        ('app/templates', 'app/templates'),
+
+        # Static files (includes app/static/fonts/ - the bundled Noto
+        # Naskh Arabic font used by the reportlab-based PDF generator
+        # in app/services/pdf_utils.py)
+        ('app/static', 'app/static'),
+
+        # Database/schema
+        ('schema.sql', '.'),
+    ],
+
+    hiddenimports=[
+        # Pillow
+        'PIL._tkinter_finder',
+
+        # PyWebView
+        'webview.platforms.edgechromium',
+        'webview.platforms.winforms',
+
+        # Python.NET / CLR
+        'clr_loader',
+        'pythonnet',
+
+        # Waitress
+        'waitress.server',
+
+        # Plyer
+        *collect_submodules('plyer'),
+
+        # pywin32 - used by ensure_application_shortcuts() in run.py to
+        # create/update the Desktop and Startup .lnk shortcuts via the
+        # WScript.Shell COM interface.
+        'win32com',
+        'win32com.client',
+        'win32timezone',
+        'pythoncom',
+        'pywintypes',
+
+        # PDF generation (app/services/pdf_utils.py, app/services/
+        # receipts.py) - replaces the old Playwright/Chromium approach
+        # entirely, no bundled browser needed anymore.
+        'reportlab.pdfbase._fontdata',
+        *collect_submodules('reportlab.pdfbase'),
+        'arabic_reshaper',
+        'bidi',
+        'bidi.algorithm',
+    ],
+
+    hookspath=[],
+
+    # Playwright's runtime hook (playwright_runtime.py, which extracted
+    # the bundled Chromium ZIP and set PLAYWRIGHT_BROWSERS_PATH) has
+    # been removed along with Playwright itself - see
+    # app/services/receipts.py's module docstring. This was almost
+    # certainly the actual source of "can't import it" during the exe
+    # build: that hook runs BEFORE run.py even starts and would fail
+    # the whole build/launch if playwright wasn't importable in the
+    # PyInstaller environment. No runtime hooks are needed anymore.
+    runtime_hooks=[],
+
+    excludes=[],
+
+    noarchive=False,
+)
+
+
+# ============================================================
+# PYZ
+# ============================================================
+
+pyz = PYZ(
+    a.pure
+)
+
+
+# ============================================================
+# EXE
+# ============================================================
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+
+    [],
+
+    name='AlQemma',
+
+    debug=False,
+
+    bootloader_ignore_signals=False,
+
+    strip=False,
+
+    upx=False,
+
+    console=False,
+
+    disable_windowed_traceback=False,
+
+    argv_emulation=False,
+
+    target_arch=None,
+
+    codesign_identity=None,
+
+    entitlements_file=None,
+
+    icon='app/static/app_icon.ico',
+)
