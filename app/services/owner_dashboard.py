@@ -206,9 +206,8 @@ def profit_revenue_series(date_from, date_to, bucket):
     }
 
 
-def purchases_vs_expected(date_from, date_to, bucket, period_label=""):
-    """Cost/value of current inventory vs actual sales, over the
-    selected period:
+def purchases_vs_expected(date_from, date_to, bucket):
+    """Cost/value of current inventory, over the selected period:
       - Stock Cost: cumulative running total (purchase_price × qty) of
         all currently active products, as of each bucket's end date -
         i.e. "cost basis of everything in the store" building up over
@@ -216,19 +215,15 @@ def purchases_vs_expected(date_from, date_to, bucket, period_label=""):
       - Expected Returns: a SINGLE flat figure - total anticipated
         sell-through value (selling_price × qty) of EVERY currently
         active product, right now - repeated identically across every
-        bucket. This is intentionally NOT time-windowed and NOT
-        affected by which timeframe tab is selected: it always answers
-        "what is the whole inventory worth if sold today", a snapshot
-        of current reality rather than a trend.
-      - Sold (المباع): actual realized sales revenue per bucket, for
-        the selected period - the real counterpart to "Expected", so
-        the chart reads as potential vs actual.
-      - Recorded Purchases: cash recorded in the purchases table per
-        bucket, for the selected period.
+        bucket. Intentionally NOT time-windowed and NOT affected by
+        which timeframe tab is selected: it always answers "what is the
+        whole inventory worth if sold today", a snapshot of current
+        reality rather than a trend.
+      - المشتريات المسجلة من المخزون: cash recorded in the purchases
+        table per bucket, for the selected period.
     """
     stock_cost = _empty_buckets(date_from, date_to, bucket)
     recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", date_from, date_to, bucket)
-    sales_by_bucket = _sum_sales_by_bucket(date_from, date_to, bucket)
 
     with db_cursor() as cur:
         rows = cur.execute(
@@ -275,7 +270,6 @@ def purchases_vs_expected(date_from, date_to, bucket, period_label=""):
         stock_cost[bucket_keys[-1]] = round(running_cost, 2)
 
     labels = [_label_for_bucket(k, bucket) for k in stock_cost]
-    period_suffix = f" ({period_label})" if period_label else ""
     return {
         "labels": labels,
         "datasets": [
@@ -292,13 +286,7 @@ def purchases_vs_expected(date_from, date_to, bucket, period_label=""):
                 "borderRadius": 6,
             },
             {
-                "label": "المباع / Sold",
-                "data": [round(sales_by_bucket.get(k, {}).get("revenue", 0.0), 2) for k in bucket_keys],
-                "backgroundColor": "rgba(167, 139, 250, 0.75)",
-                "borderRadius": 6,
-            },
-            {
-                "label": f"مشتريات مسجلة{period_suffix} / Recorded Purchases",
+                "label": "المشتريات المسجلة من المخزون / Recorded Purchases",
                 "data": [round(recorded.get(k, 0.0), 2) for k in bucket_keys],
                 "backgroundColor": "rgba(96, 165, 250, 0.65)",
                 "borderRadius": 6,
@@ -535,7 +523,7 @@ def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME, reset_at: str | 
         "kpis": kpis(date_from, date_to),
         "charts": {
             "profit_revenue": profit_revenue_series(date_from, date_to, bucket),
-            "purchases_expected": purchases_vs_expected(date_from, date_to, bucket, period_label=meta["label_ar"]),
+            "purchases_expected": purchases_vs_expected(date_from, date_to, bucket),
             "stock_at_risk": stock["combined_chart"],
         },
         "stock_details": {
