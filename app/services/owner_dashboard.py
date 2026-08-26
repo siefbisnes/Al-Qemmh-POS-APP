@@ -208,10 +208,6 @@ def profit_revenue_series(date_from, date_to, bucket):
 
 def purchases_vs_expected(date_from, date_to, bucket):
     """Cost/value of current inventory, over the selected period:
-      - Stock Cost: cumulative running total (purchase_price × qty) of
-        all currently active products, as of each bucket's end date -
-        i.e. "cost basis of everything in the store" building up over
-        time, not just what was added inside the selected window.
       - Expected Returns: a SINGLE flat figure - total anticipated
         sell-through value (selling_price × qty) of EVERY currently
         active product, right now - repeated identically across every
@@ -222,17 +218,16 @@ def purchases_vs_expected(date_from, date_to, bucket):
       - المشتريات المسجلة من المخزون: cash recorded in the purchases
         table per bucket, for the selected period.
     """
-    stock_cost = _empty_buckets(date_from, date_to, bucket)
+    buckets = _empty_buckets(date_from, date_to, bucket)
     recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", date_from, date_to, bucket)
 
     with db_cursor() as cur:
         rows = cur.execute(
             """
-            SELECT date_added, quantity, purchase_price, selling_price
+            SELECT quantity, selling_price
             FROM products
             WHERE COALESCE(is_active, 1) = 1
               AND COALESCE(source, '') <> 'service_placeholder'
-            ORDER BY date_added
             """,
         ).fetchall()
 
@@ -240,45 +235,11 @@ def purchases_vs_expected(date_from, date_to, bucket):
     # inventory, unrelated to any bucket or date range.
     total_expected_now = sum((r["selling_price"] or 0) * (r["quantity"] or 0) for r in rows)
 
-    # Stock Cost: running cumulative total as of each bucket's end date.
-    running_cost = 0.0
-    row_idx = 0
-    n_rows = len(rows)
-    bucket_keys = list(stock_cost.keys())  # OrderedDict, ascending chronological order
-    for key in bucket_keys:
-        # Month buckets are "YYYY-MM" - "-31" is always >= any real day in
-        # that month, giving a safe inclusive upper bound via plain string
-        # comparison against date_added ("YYYY-MM-DD"), same as day buckets
-        # comparing directly.
-        bucket_end = key if bucket != "month" else f"{key}-31"
-        while row_idx < n_rows:
-            added = (rows[row_idx]["date_added"] or "")[:10]
-            if added and added > bucket_end:
-                break
-            qty = rows[row_idx]["quantity"] or 0
-            running_cost += (rows[row_idx]["purchase_price"] or 0) * qty
-            row_idx += 1
-        stock_cost[key] = round(running_cost, 2)
-
-    # Safety net: fold anything still unconsumed into the last bucket
-    # instead of silently dropping it (e.g. a product's date_added newer
-    # than the range's own end date, from a clock/timezone edge case).
-    if row_idx < n_rows and bucket_keys:
-        for i in range(row_idx, n_rows):
-            qty = rows[i]["quantity"] or 0
-            running_cost += (rows[i]["purchase_price"] or 0) * qty
-        stock_cost[bucket_keys[-1]] = round(running_cost, 2)
-
-    labels = [_label_for_bucket(k, bucket) for k in stock_cost]
+    bucket_keys = list(buckets.keys())
+    labels = [_label_for_bucket(k, bucket) for k in buckets]
     return {
         "labels": labels,
         "datasets": [
-            {
-                "label": "تكلفة المخزون / Stock Cost",
-                "data": list(stock_cost.values()),
-                "backgroundColor": "rgba(248, 113, 113, 0.75)",
-                "borderRadius": 6,
-            },
             {
                 "label": "القيمة المتوقعة / Expected Returns",
                 "data": [round(total_expected_now, 2)] * len(bucket_keys),
