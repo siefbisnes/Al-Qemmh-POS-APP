@@ -206,52 +206,100 @@ def profit_revenue_series(date_from, date_to, bucket):
     }
 
 
-def purchases_vs_expected(date_from, date_to, bucket):
-    """Stock spend (purchase_price × qty of products added in period) vs
-    anticipated sell-through value (selling_price × qty). Also overlays
-    cash recorded in the purchases table as 'recorded purchases'."""
+def purchases_vs_expected(date_from, date_to, bucket, period_label=""):
+    """Cost/value of current inventory vs actual sales, over the
+    selected period:
+      - Stock Cost: cumulative running total (purchase_price × qty) of
+        all currently active products, as of each bucket's end date -
+        i.e. "cost basis of everything in the store" building up over
+        time, not just what was added inside the selected window.
+      - Expected Returns: a SINGLE flat figure - total anticipated
+        sell-through value (selling_price × qty) of EVERY currently
+        active product, right now - repeated identically across every
+        bucket. This is intentionally NOT time-windowed and NOT
+        affected by which timeframe tab is selected: it always answers
+        "what is the whole inventory worth if sold today", a snapshot
+        of current reality rather than a trend.
+      - Sold (المباع): actual realized sales revenue per bucket, for
+        the selected period - the real counterpart to "Expected", so
+        the chart reads as potential vs actual.
+      - Recorded Purchases: cash recorded in the purchases table per
+        bucket, for the selected period.
+    """
     stock_cost = _empty_buckets(date_from, date_to, bucket)
-    expected = _empty_buckets(date_from, date_to, bucket)
     recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", date_from, date_to, bucket)
+    sales_by_bucket = _sum_sales_by_bucket(date_from, date_to, bucket)
 
     with db_cursor() as cur:
         rows = cur.execute(
             """
             SELECT date_added, quantity, purchase_price, selling_price
             FROM products
-            WHERE date_added >= ? AND date_added <= ?
+            WHERE COALESCE(is_active, 1) = 1
               AND COALESCE(source, '') <> 'service_placeholder'
+            ORDER BY date_added
             """,
-            (date_from, date_to),
         ).fetchall()
 
-    for r in rows:
-        key = _bucket_key(r["date_added"], bucket)
-        if key not in stock_cost:
-            continue
-        qty = r["quantity"] or 0
-        stock_cost[key] += (r["purchase_price"] or 0) * qty
-        expected[key] += (r["selling_price"] or 0) * qty
+    # Expected Returns: one flat total across the ENTIRE active
+    # inventory, unrelated to any bucket or date range.
+    total_expected_now = sum((r["selling_price"] or 0) * (r["quantity"] or 0) for r in rows)
+
+    # Stock Cost: running cumulative total as of each bucket's end date.
+    running_cost = 0.0
+    row_idx = 0
+    n_rows = len(rows)
+    bucket_keys = list(stock_cost.keys())  # OrderedDict, ascending chronological order
+    for key in bucket_keys:
+        # Month buckets are "YYYY-MM" - "-31" is always >= any real day in
+        # that month, giving a safe inclusive upper bound via plain string
+        # comparison against date_added ("YYYY-MM-DD"), same as day buckets
+        # comparing directly.
+        bucket_end = key if bucket != "month" else f"{key}-31"
+        while row_idx < n_rows:
+            added = (rows[row_idx]["date_added"] or "")[:10]
+            if added and added > bucket_end:
+                break
+            qty = rows[row_idx]["quantity"] or 0
+            running_cost += (rows[row_idx]["purchase_price"] or 0) * qty
+            row_idx += 1
+        stock_cost[key] = round(running_cost, 2)
+
+    # Safety net: fold anything still unconsumed into the last bucket
+    # instead of silently dropping it (e.g. a product's date_added newer
+    # than the range's own end date, from a clock/timezone edge case).
+    if row_idx < n_rows and bucket_keys:
+        for i in range(row_idx, n_rows):
+            qty = rows[i]["quantity"] or 0
+            running_cost += (rows[i]["purchase_price"] or 0) * qty
+        stock_cost[bucket_keys[-1]] = round(running_cost, 2)
 
     labels = [_label_for_bucket(k, bucket) for k in stock_cost]
+    period_suffix = f" ({period_label})" if period_label else ""
     return {
         "labels": labels,
         "datasets": [
             {
                 "label": "تكلفة المخزون / Stock Cost",
-                "data": [round(v, 2) for v in stock_cost.values()],
+                "data": list(stock_cost.values()),
                 "backgroundColor": "rgba(248, 113, 113, 0.75)",
                 "borderRadius": 6,
             },
             {
                 "label": "القيمة المتوقعة / Expected Returns",
-                "data": [round(v, 2) for v in expected.values()],
+                "data": [round(total_expected_now, 2)] * len(bucket_keys),
                 "backgroundColor": "rgba(52, 211, 153, 0.75)",
                 "borderRadius": 6,
             },
             {
-                "label": "مشتريات مسجلة / Recorded Purchases",
-                "data": [round(recorded.get(k, 0.0), 2) for k in stock_cost],
+                "label": "المباع / Sold",
+                "data": [round(sales_by_bucket.get(k, {}).get("revenue", 0.0), 2) for k in bucket_keys],
+                "backgroundColor": "rgba(167, 139, 250, 0.75)",
+                "borderRadius": 6,
+            },
+            {
+                "label": f"مشتريات مسجلة{period_suffix} / Recorded Purchases",
+                "data": [round(recorded.get(k, 0.0), 2) for k in bucket_keys],
                 "backgroundColor": "rgba(96, 165, 250, 0.65)",
                 "borderRadius": 6,
             },
@@ -463,8 +511,19 @@ def kpis(date_from, date_to):
 
 
 def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME, reset_at: str | None = None) -> dict:
-    date_from, date_to, meta = _range_for(timeframe, reset_at=reset_at)
+    # reset_at is accepted for backward compatibility with existing
+    # callers but intentionally unused here now: clipping this section's
+    # date range to "since the last reset" meant every timeframe tab
+    # (weekly/monthly/6months/yearly) could collapse to a single
+    # near-empty bucket whenever a reset had been used recently, breaking
+    # revenue/profit/purchases-vs-expected regardless of which tab was
+    # selected. Analytics here always reflects the timeframe's own full
+    # natural window - إعادة ضبط التقارير still correctly zeroes the
+    # separate cash-drawer totals on the main Reports page (reports.py),
+    # which this doesn't touch.
+    date_from, date_to, meta = _range_for(timeframe, reset_at=None)
     bucket = meta["bucket"]
+
     stock = stagnant_and_damaged(date_from=date_from, date_to=date_to)
 
     return {
@@ -476,7 +535,7 @@ def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME, reset_at: str | 
         "kpis": kpis(date_from, date_to),
         "charts": {
             "profit_revenue": profit_revenue_series(date_from, date_to, bucket),
-            "purchases_expected": purchases_vs_expected(date_from, date_to, bucket),
+            "purchases_expected": purchases_vs_expected(date_from, date_to, bucket, period_label=meta["label_ar"]),
             "stock_at_risk": stock["combined_chart"],
         },
         "stock_details": {

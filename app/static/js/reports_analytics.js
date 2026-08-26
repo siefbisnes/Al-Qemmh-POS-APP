@@ -157,18 +157,12 @@
       if (el) el.textContent = money(map[id]);
     });
     
-    // Secondary value for profit: show potential profit if there's outstanding debt
+    // Secondary line under Net Profit removed entirely per request - no
+    // debt-related text shown here in any state, regardless of whether
+    // there's outstanding debt or not.
     var secondaryEl = document.getElementById("raKpiProfitSecondary");
     if (secondaryEl) {
-      if (k.outstanding_debt > 0.01) {
-        secondaryEl.innerHTML = 
-          '<div class="potential-value">≈ ' + money(k.potential_net_profit) + '</div>' +
-          '<div>بعد تحصيل المديونيات</div>';
-      } else {
-        secondaryEl.innerHTML = 
-          '<div class="potential-value">✓</div>' +
-          '<div>تم تحصيل كل المديونيات</div>';
-      }
+      secondaryEl.innerHTML = '';
     }
     
     var stagnantHint = document.getElementById("raKpiStagnantHint");

@@ -171,15 +171,19 @@
         .catch(function () {});
     }
 
+    // Website/plain-browser access needs nothing here: the dot's initial
+    // state is already rendered correctly by the server (see the
+    // sidebar-footer markup above, using connectivity_status() at
+    // template-render time) - no client-side fetch/timing involved at
+    // all, so there's nothing to get stuck on "checking". This block
+    // only ever refines that further for the desktop app specifically,
+    // where window.pywebview.api exists and can push live updates via
+    // window.evaluate_js every ~60s without needing a page reload.
     if (window.pywebview && window.pywebview.api) {
       fetchInitialStatus();
     } else {
       window.addEventListener("pywebviewready", fetchInitialStatus, { once: true });
     }
-    // No polling fallback needed here beyond pywebviewready - unlike
-    // theme (which must be correct before first paint), a few seconds'
-    // delay before the dot's first update is fine, and the background
-    // monitor's own first tick will arrive shortly after regardless.
   })();
 </script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -300,9 +304,10 @@
     <div class="sidebar-footer">
       <div class="sidebar-footer-main">
         <span class="sidebar-footer-item">
-          <span class="connectivity-indicator" id="connectivityIndicator" title="جارٍ التحقق من الاتصال...">
-            <span class="connectivity-dot" id="connectivityDot"></span>
-            <span class="connectivity-label" id="connectivityLabel">جارٍ التحقق...</span>
+          {% set _cs = connectivity_status() %}
+          <span class="connectivity-indicator" id="connectivityIndicator" title="{{ _cs.message or 'جارٍ التحقق من الاتصال...' }}">
+            <span class="connectivity-dot" id="connectivityDot" data-status="{{ _cs.status }}"></span>
+            <span class="connectivity-label" id="connectivityLabel">{{ {'tailscale': 'متصل بـ Tailscale', 'no_tailscale': 'متصل - بدون Tailscale', 'offline': 'لا يوجد اتصال'}.get(_cs.status, 'جارٍ التحقق...') }}</span>
           </span>
         </span>
         <span class="sidebar-footer-separator">·</span>

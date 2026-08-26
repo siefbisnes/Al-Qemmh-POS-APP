@@ -5,37 +5,12 @@ from app import db as db_module
 
 
 def create_app(config_class=Config):
-    # Explicitly pinned to BUNDLE_DIR (config.py's "wherever the bundled
-    # read-only files actually are" - _MEIPASS when frozen, the project
-    # folder in dev) rather than leaving Flask to guess static_folder/
-    # template_folder as paths *relative to this module's own __file__*.
-    #
-    # That implicit relative resolution is exactly the kind of thing
-    # that can differ between machines running the same frozen .exe:
-    # PyInstaller compiles this package's .py files into its internal
-    # archive (not extracted to real files on disk), so app/__init__.py's
-    # own __file__/root_path inside a frozen build is not guaranteed to
-    # land at the same real, listable directory that alqemma.spec's
-    # `datas` entries physically extracted app/static and app/templates
-    # into - it can happen to resolve correctly on one machine/PyInstaller
-    # version and not another, which matches "works on the machine we
-    # built and tested it on, looks unstyled with broken JS on a
-    # different fresh machine" exactly: Flask silently falls back to
-    # serving nothing for /static/... (or nothing at all) rather than
-    # erroring loudly, so CSS and JS just don't load with no obvious
-    # cause. Pinning these to BUNDLE_DIR removes that ambiguity entirely
-    # - the same absolute path config.py already uses correctly for
-    # SCHEMA_PATH.
     static_folder = os.path.join(BUNDLE_DIR, "app", "static")
     template_folder = os.path.join(BUNDLE_DIR, "app", "templates")
 
     app = Flask(__name__, static_folder=static_folder, template_folder=template_folder)
     app.config.from_object(config_class)
 
-    # Diagnostic logging so a future "looks unstyled on this one machine"
-    # report is immediately answerable from launcher.log instead of being
-    # unreproducible - confirms exactly where Flask is looking for these
-    # files and whether they're actually there on THIS machine.
     app.logger.info(f"static_folder = {static_folder} (exists: {os.path.isdir(static_folder)})")
     app.logger.info(f"template_folder = {template_folder} (exists: {os.path.isdir(template_folder)})")
     style_css_path = os.path.join(static_folder, "css", "style.css")
@@ -109,6 +84,17 @@ def register_template_helpers(app):
     app.jinja_env.globals["branding"] = get_branding
     app.jinja_env.globals["config"] = app.config
 
+    def connectivity_status():
+        controller = app.config.get("SERVER_CONTROLLER")
+        if controller is None:
+            return {"status": "checking", "message": ""}
+        try:
+            return controller.get_connectivity_status()
+        except Exception:
+            return {"status": "checking", "message": ""}
+
+    app.jinja_env.globals["connectivity_status"] = connectivity_status
+
     @app.template_filter("money")
     def money_filter(value):
         try:
@@ -118,18 +104,6 @@ def register_template_helpers(app):
 
 
 def register_no_cache_headers(app):
-    """This app runs entirely offline on a handful of shop devices, so
-    the tiny bandwidth cost of always refetching is nothing - freshness
-    is what actually matters. Added specifically because pywebview's
-    WebKitGTK engine on Linux has been caching CSS/JS/HTML more
-    aggressively (and less predictably) than a normal browser tab on
-    the same machine, causing edited files to keep showing old
-    behavior inside the native window even after being replaced on
-    disk and restarting the app. This forces every response - static
-    files and rendered pages alike - to be revalidated every time,
-    which removes that whole class of "I changed the file but nothing
-    changed" bug rather than chasing down the specific cache folder to
-    clear for each engine/OS/version combination."""
     @app.after_request
     def _disable_caching(response):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"

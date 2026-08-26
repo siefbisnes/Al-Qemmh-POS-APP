@@ -1300,6 +1300,13 @@ class ServerController:
     def create_app(self):
         from app import create_app
         self.app = create_app()
+        # Lets a Flask route (see app/routes/connectivity.py) read the same
+        # cached status this class already pushes to the pywebview window
+        # via window.evaluate_js - needed so plain-browser access (LAN/
+        # Tailscale URL opened in a normal browser tab, not the desktop
+        # app) can poll for it over HTTP instead, since evaluate_js only
+        # reaches the native window and has no effect on a separate browser.
+        self.app.config["SERVER_CONTROLLER"] = self
         return self.app
 
     def start(self, log_callback=None):

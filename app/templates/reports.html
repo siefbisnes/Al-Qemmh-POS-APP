@@ -73,19 +73,6 @@
 <div id="reportsDetailsCard" class="panel" style="display:none; margin-top:1rem;" dir="rtl">
   <div class="stat-grid">
     <div class="stat-card"><div class="label">المصاريف</div><div class="value">{{ range_summary.expenses|money }}</div></div>
-    <div class="stat-card">
-      <div class="label">صافي الربح</div>
-      <div class="value">{{ range_summary.net_profit|money }}</div>
-      <div class="secondary-value">
-        {% if range_summary.outstanding_debt > 0.01 %}
-          <div class="secondary-value-main">≈ {{ range_summary.potential_net_profit|money }}</div>
-          <div class="secondary-value-label">بعد تحصيل المديونيات</div>
-        {% else %}
-          <div class="secondary-value-main">✓</div>
-          <div class="secondary-value-label">تم تحصيل كل المديونيات</div>
-        {% endif %}
-      </div>
-    </div>
   </div>
 </div>
 
@@ -145,7 +132,7 @@
 
       <article class="ra-chart-card">
         <div class="ra-chart-head">
-          <h3>مشتريات المخزون مقابل العائد المتوقع</h3>
+          <h3>مشتريات المخزون مقابل العائد المتوقع والمباع</h3>
           <span>Cost vs expected sell value</span>
         </div>
         <div class="ra-chart-wrap tall">
