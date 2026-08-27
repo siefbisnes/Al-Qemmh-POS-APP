@@ -1,4 +1,8 @@
 import os
+import hashlib
+import json
+import platform
+import uuid
 from flask import Flask, session
 from config import Config, BUNDLE_DIR
 from app import db as db_module
@@ -23,6 +27,7 @@ def create_app(config_class=Config):
     register_template_helpers(app)
     register_auth_guard(app)
     register_no_cache_headers(app)
+    register_changelog_routes(app)
     return app
 
 
@@ -110,6 +115,81 @@ def register_no_cache_headers(app):
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         return response
+
+
+# ============================================================
+# "ما الجديد" popup - shown once per physical machine per changelog
+# version (see CHANGELOG in config.py for the actual content).
+#
+# Detection is by machine fingerprint (hostname + network adapter MAC,
+# hashed), never by IP - Tailscale/LAN addresses change constantly and
+# don't identify the machine at all. The "seen" record is a single
+# {fingerprint: last_seen_version} dict in the settings table, so even
+# if the whole SQLite database is copied onto a different PC, that new
+# PC still hasn't earned its own "seen" mark and the popup fires there
+# correctly.
+# ============================================================
+_CHANGELOG_SETTINGS_KEY = "changelog_seen_by_machine"
+
+
+def _machine_fingerprint():
+    raw = f"{platform.node()}::{uuid.getnode()}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _changelog_load_seen():
+    from app.services import settings as settings_service
+    raw = settings_service.get(_CHANGELOG_SETTINGS_KEY)
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _changelog_pending_entries():
+    from config import CHANGELOG
+    if not CHANGELOG:
+        return []
+
+    fingerprint = _machine_fingerprint()
+    seen = _changelog_load_seen()
+    last_seen_version = seen.get(fingerprint)
+
+    if last_seen_version is None:
+        return list(CHANGELOG)  # this machine has never dismissed anything
+
+    versions = [entry["version"] for entry in CHANGELOG]
+    if last_seen_version not in versions:
+        return list(CHANGELOG)  # unrecognized bookkeeping - safest default is to show everything
+
+    idx = versions.index(last_seen_version)
+    return CHANGELOG[idx + 1:]
+
+
+def register_changelog_routes(app):
+    from flask import jsonify
+    from config import CHANGELOG, LICENSE_SHORT
+
+    @app.route("/changelog/pending")
+    def changelog_pending():
+        entries = _changelog_pending_entries()
+        return jsonify({
+            "entries": entries,
+            "license": LICENSE_SHORT if entries else None,
+        })
+
+    @app.route("/changelog/ack", methods=["POST"])
+    def changelog_ack():
+        from app.services import settings as settings_service
+        if CHANGELOG:
+            fingerprint = _machine_fingerprint()
+            seen = _changelog_load_seen()
+            seen[fingerprint] = CHANGELOG[-1]["version"]
+            settings_service.set(_CHANGELOG_SETTINGS_KEY, json.dumps(seen))
+        return jsonify({"ok": True})
 
 
 def register_auth_guard(app):

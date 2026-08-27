@@ -61,3 +61,39 @@ class Config:
     TAILSCALE_OAUTH_CLIENT_ID = os.environ.get("TAILSCALE_OAUTH_CLIENT_ID", "knHAGKegyY11CNTRL")
     TAILSCALE_OAUTH_CLIENT_SECRET = os.environ.get("TAILSCALE_OAUTH_CLIENT_SECRET", "tskey-client-knHAGKegyY11CNTRL-Hb6zi5xhi6bBSgF1U4Gf5bVVaFjC4izAf")
     TAILSCALE_TAILNET = os.environ.get("TAILSCALE_TAILNET", "TwkJN2Hsc521CNTRL")
+
+
+# ============================================================
+# CHANGELOG / "ما الجديد" popup.
+# To ship a new release note: add ONE new entry to the TOP of
+# CHANGELOG below with a new, unique "version" string - nothing else
+# in the app needs to change. The popup logic (app/__init__.py) shows
+# every entry a given machine hasn't dismissed yet, in order, next
+# time it launches there - detected per physical machine (hostname +
+# MAC address), never by IP, so it survives Tailscale/LAN address
+# changes and still fires correctly on a brand-new PC even if it's
+# running a copy of an old database.
+# ============================================================
+CHANGELOG = [
+    {
+     	"version": "4.6.0",
+        "date": "2026-08-27",
+        "patches": [
+            "تغييرات في الواجها و الرسومات",
+            "قسم تسديد الديون لن يظهر مره اخري لو كان العميل ليس له ديون.",
+        ],
+	"notes": [
+            "ظهرت شارة صفراء جديدة \"مدفوع جزئيًا\" بجانب أي فاتورة أو اوردر لم يُسدَّد بالكامل، بجانب شارتي \"مدفوع\" و\"غير مدفوع\" الموجودتين.",
+            "قسم \"تسديد دين\" في صفحة تفاصيل الشراء لن يظهر إطلاقًا إذا لم يكن على العميل أي مبلغ متبقٍ.",
+        ],
+        "user_must_do": [
+                    "ينصح داءما ان تقوم بضغط علي تصحيح المشاكل مع كل تحديث و مع كل فتره و بع  6 شهور"  ,
+                ],
+            },
+        ]
+
+LICENSE_SHORT = (
+    "برنامج القمة (Al-Qemma) — كل الحقوق محفوظة لسيف. "
+    "الاستخدام مرخّص لهذا الجهاز فقط، ويُمنع  توزيعه أو "
+    "تعديله أو بيعه دون إذح من المالك."
+)

@@ -313,7 +313,7 @@
         <span class="sidebar-footer-separator">·</span>
         <span class="sidebar-footer-item">SQLite</span>
         <span class="sidebar-footer-separator">·</span>
-        <span class="sidebar-footer-item">النسخة 1.5 by Sief</span>
+        <span class="sidebar-footer-item"></span>
       </div>
       <div class="sidebar-footer-phone">01020889951</div>
     </div>
@@ -488,6 +488,62 @@
       window.history.back();
     });
   })();
+</script>
+
+<div class="modal-overlay" id="whatsNewModal" hidden>
+  <div class="modal-box" style="max-width:520px; text-align:right; max-height:80vh; overflow-y:auto;">
+    <h2 style="margin-top:0;">ما الجديد</h2>
+    <div id="whatsNewBody"></div>
+    <div class="modal-actions" style="margin-top:1.25rem;">
+      <button type="button" class="btn btn-primary" id="whatsNewOkBtn">تم، فهمت</button>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    fetch('/changelog/pending')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.entries || !data.entries.length) return;
+
+        var body = document.getElementById('whatsNewBody');
+        var html = '';
+        data.entries.forEach(function (entry) {
+          var days = Math.max(0, Math.floor((Date.now() - new Date(entry.date)) / 86400000));
+          var ageLabel = days === 0 ? 'اليوم' : (days === 1 ? 'منذ يوم واحد' : 'منذ ' + days + ' يوم');
+          html += '<div style="margin-bottom:1.1rem; padding-bottom:1.1rem; border-bottom:1px solid var(--border);">';
+          html += '<h3 style="margin:0 0 .5rem;">الإصدار ' + entry.version + ' — ' + entry.date + ' (' + ageLabel + ')</h3>';
+          if (entry.patches && entry.patches.length) {
+            html += '<p style="font-weight:600; margin:.5rem 0 .25rem;">التحديثات:</p><ul style="padding-inline-start:1.2rem; line-height:1.8; margin:0;">';
+            entry.patches.forEach(function (p) { html += '<li>' + p + '</li>'; });
+            html += '</ul>';
+          }
+          if (entry.notes && entry.notes.length) {
+            html += '<p style="font-weight:600; margin:.75rem 0 .25rem;">ملاحظات:</p><ul style="padding-inline-start:1.2rem; line-height:1.8; margin:0;">';
+            entry.notes.forEach(function (n) { html += '<li>' + n + '</li>'; });
+            html += '</ul>';
+          }
+          if (entry.user_must_do && entry.user_must_do.length) {
+            html += '<p style="font-weight:600; margin:.75rem 0 .25rem; color:var(--warning);">مطلوب منك:</p><ul style="padding-inline-start:1.2rem; line-height:1.8; margin:0;">';
+            entry.user_must_do.forEach(function (u) { html += '<li>' + u + '</li>'; });
+            html += '</ul>';
+          }
+          html += '</div>';
+        });
+        if (data.license) {
+          html += '<p class="subtitle" style="margin-top:.5rem;">' + data.license + '</p>';
+        }
+        body.innerHTML = html;
+
+        var modal = document.getElementById('whatsNewModal');
+        modal.hidden = false;
+        document.getElementById('whatsNewOkBtn').addEventListener('click', function () {
+          modal.hidden = true;
+          fetch('/changelog/ack', { method: 'POST' });
+        });
+      })
+      .catch(function () { /* never block the app over this */ });
+  });
 </script>
 {% block scripts %}{% endblock %}
 </body>
