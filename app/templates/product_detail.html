@@ -22,9 +22,10 @@
       <input type="hidden" name="quantity" id="writeoffQuantity">
       <input type="hidden" name="note" id="writeoffNote" value="">
       <button type="button" class="btn btn-warning" id="writeoffButton"
-              data-purchase="{{ product.purchase_price }}"
+              {% if show_purchase_price %}data-purchase="{{ product.purchase_price }}"{% endif %}
               data-selling="{{ product.selling_price }}"
               data-max="{{ product.quantity }}"
+              data-show-purchase="{{ 'true' if show_purchase_price else 'false' }}"
               {% if product.quantity|int <= 0 %}disabled{% endif %}>
         الهالك
       </button>
@@ -72,48 +73,6 @@
         <h3 style="margin-top:1rem;">الوصف</h3>
         <p>{{ product.description }}</p>
       {% endif %}
-    </div>
-
-    <div class="panel">
-      <h2>التوافق</h2>
-      {% if product.compatibility %}
-        <table class="data-table">
-          <tr><th>النوع</th><th>متوافق مع</th><th>ملاحظات</th><th></th></tr>
-          {% for c in product.compatibility %}
-            <tr>
-              <td>{{ c.component_type }}</td>
-              <td>{{ c.component_value }}</td>
-              <td>{{ c.notes or '' }}</td>
-              <td>
-                <form method="post" action="{{ url_for('products.delete_compatibility', product_id=product.id, entry_id=c.id) }}"
-                      onsubmit="return confirm('مرتجع هذا السجل؟');">
-                  <button type="submit" class="btn btn-sm btn-danger">مرتجع</button>
-                </form>
-              </td>
-            </tr>
-          {% endfor %}
-        </table>
-      {% else %}
-        <p class="subtitle"></p>
-      {% endif %}
-
-      <form method="post" action="{{ url_for('products.add_compatibility', product_id=product.id) }}" class="form-grid" style="margin-top:1rem;">
-        <div class="field">
-          <label>نوع المكون</label>
-          <input type="text" name="component_type" placeholder="مثال: CPU, RAM, Storage" required>
-        </div>
-        <div class="field">
-          <label>القيمة المتوافقة</label>
-          <input type="text" name="component_value" placeholder="مثال: E5-1650 V3" required>
-        </div>
-        <div class="field" style="grid-column: 1 / -1;">
-          <label>ملاحظات (اختياري)</label>
-          <input type="text" name="notes">
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <button type="submit" class="btn">إضافة عنصر توافق</button>
-        </div>
-      </form>
     </div>
   </div>
 
@@ -221,6 +180,7 @@
   var maxQty = parseInt(button.getAttribute("data-max"), 10) || 0;
   var purchase = parseFloat(button.getAttribute("data-purchase")) || 0;
   var selling = parseFloat(button.getAttribute("data-selling")) || 0;
+  var showPurchase = button.getAttribute("data-show-purchase") === "true";
 
   function money(n) {
     return (Math.round(n * 100) / 100).toLocaleString("en-EG", {
@@ -243,6 +203,15 @@
     box.style.cssText = "max-width:420px;width:100%;max-height:88vh;overflow:auto;";
     box.dir = "rtl";
 
+    // خسارة التكلفة is a purchase-price-derived figure just like سعر
+    // الشراء itself, so it's withheld alongside it - showing "0.00"
+    // there for a non-admin would misleadingly imply no cost loss
+    // instead of simply not showing the figure at all.
+    var purchaseRowsHtml = showPurchase
+      ? '<p style="margin:.2rem 0;">سعر الشراء للوحدة: <strong>' + money(purchase) + '</strong></p>' +
+        '<p style="margin:.2rem 0;">خسارة التكلفة (تُخصم من صافي الربح): <strong id="writeoffCostLoss">' + money(purchase) + '</strong></p>'
+      : '';
+
     box.innerHTML =
       '<div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem;">' +
         '<h2 style="margin:0;">الهالك</h2>' +
@@ -258,9 +227,8 @@
         '<input type="text" id="writeoffDialogNote" placeholder="سبب الشطب...">' +
       '</div>' +
       '<div class="panel" style="background:rgba(0,0,0,.03); margin-top:.5rem;">' +
-        '<p style="margin:.2rem 0;">سعر الشراء للوحدة: <strong>' + money(purchase) + '</strong></p>' +
+        purchaseRowsHtml +
         '<p style="margin:.2rem 0;">سعر البيع للوحدة: <strong>' + money(selling) + '</strong></p>' +
-        '<p style="margin:.2rem 0;">خسارة التكلفة (تُخصم من صافي الربح): <strong id="writeoffCostLoss">' + money(purchase) + '</strong></p>' +
         '<p style="margin:.2rem 0;">قيمة البيع الضائعة: <strong id="writeoffRevenueLoss">' + money(selling) + '</strong></p>' +
       '</div>' +
       '<button type="button" class="btn btn-danger" id="writeoffDialogConfirm" style="width:100%; margin-top:1rem;">تأكيد الشطب</button>';
@@ -276,7 +244,7 @@
     function updatePreview() {
       var qty = parseInt(qtyInput.value, 10);
       if (isNaN(qty) || qty < 0) qty = 0;
-      costLossEl.textContent = money(qty * purchase);
+      if (costLossEl) costLossEl.textContent = money(qty * purchase);
       revenueLossEl.textContent = money(qty * selling);
     }
     qtyInput.addEventListener("input", updatePreview);

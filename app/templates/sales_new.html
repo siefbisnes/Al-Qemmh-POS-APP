@@ -200,7 +200,7 @@
       <input type="number" step="0.01" name="payment_amount" class="payment-amount" placeholder="المبلغ">
     </div>
     <div class="field" style="margin-bottom:0;">
-      <button type="button" class="btn btn-sm btn-danger remove-payment">مرتجع</button>
+      <button type="button" class="btn btn-sm btn-danger remove-payment">حذف</button>
     </div>
   </div>
 </template>
@@ -337,9 +337,22 @@
     return lineEl;
   }
 
+  const addPaymentRowButton = document.getElementById("addPaymentRow");
+  const MAX_PAYMENT_METHODS = 3;
+
+  function updateAddPaymentButtonState() {
+    const count = paymentsContainer.querySelectorAll(".payment-row").length;
+    addPaymentRowButton.disabled = count >= MAX_PAYMENT_METHODS;
+  }
+
   function addPaymentRow() {
+    if (paymentsContainer.querySelectorAll(".payment-row").length >= MAX_PAYMENT_METHODS) {
+      updateAddPaymentButtonState();
+      return;
+    }
     const clone = paymentTemplate.content.cloneNode(true);
     paymentsContainer.appendChild(clone);
+    updateAddPaymentButtonState();
     recalcTotals();
   }
 
@@ -355,12 +368,13 @@
   paymentsContainer.addEventListener("click", (e) => {
     if (e.target.classList.contains("remove-payment")) {
       e.target.closest(".payment-row").remove();
+      updateAddPaymentButtonState();
       recalcTotals();
     }
   });
   paymentsContainer.addEventListener("input", recalcTotals);
 
-  document.getElementById("addPaymentRow").addEventListener("click", addPaymentRow);
+  addPaymentRowButton.addEventListener("click", addPaymentRow);
 
   // طلب توصيل (spec §2): hides the normal payment section, doesn't ask
   // for received money, and relabels the submit button to إتمام عملية

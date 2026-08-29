@@ -295,7 +295,6 @@
         </div>
         <div class="nav-plain">
           <a href="{{ url_for('categories.index') }}" class="nav-link {{ 'is-active' if request.endpoint and request.endpoint.startswith('categories.') }}">الأقسام</a>
-          <a href="{{ url_for('compatibility.search') }}" class="nav-link {{ 'is-active' if request.endpoint == 'compatibility.search' }}">بحث التوافق</a>
           <a href="{{ url_for('settings.index') }}" class="nav-link {{ 'is-active' if request.endpoint and request.endpoint.startswith('settings.') }}">الإعدادات</a>
         </div>
       </details>
@@ -313,7 +312,7 @@
         <span class="sidebar-footer-separator">·</span>
         <span class="sidebar-footer-item">SQLite</span>
         <span class="sidebar-footer-separator">·</span>
-        <span class="sidebar-footer-item"></span>
+        <span class="sidebar-footer-item">النسخة 1.5 by Sief</span>
       </div>
       <div class="sidebar-footer-phone">01020889951</div>
     </div>

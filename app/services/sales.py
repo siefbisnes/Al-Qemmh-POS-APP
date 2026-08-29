@@ -30,9 +30,12 @@ via _cleanup_ghost_customer() below, so that rule can't drift between the
 two paths.
 """
 from datetime import datetime, timedelta
+import secrets
+import sqlite3
 
 from app.db import db_cursor
 from app.services import settings as settings_service
+from app.services import product_audit
 
 PAYMENT_METHODS = [
     ("cash", "نقدي (Cash)"),
@@ -41,20 +44,46 @@ PAYMENT_METHODS = [
 ]
 PAYMENT_LABELS_AR = {"cash": "نقدي", "vodafone_cash": "Vodafone Cash", "instapay": "Instapay"}
 
+# Excludes 0/O and 1/I/L - characters that look alike when read off a
+# printed receipt or typed into search. 6 characters from this 31-symbol
+# alphabet is ~887 million possible codes; collisions are handled (see
+# _generate_receipt_number) rather than assumed impossible, but in
+# practice this shop will never see one.
+_RECEIPT_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+_RECEIPT_CODE_LENGTH = 6
+
+
+def _generate_receipt_number(year):
+    """A fresh 'INV-<year>-<random code>' string - NOT unique-checked
+    here, that happens at the INSERT site (see create_transaction),
+    which retries with a new call to this function on the rare
+    collision. Deliberately not derived from transactions.id: an
+    id-derived number breaks the moment two databases are ever merged
+    (id sequences can collide across separate databases), while an
+    independently-random code cannot."""
+    code = "".join(secrets.choice(_RECEIPT_CODE_ALPHABET) for _ in range(_RECEIPT_CODE_LENGTH))
+    return f"INV-{year}-{code}"
+
 
 class InsufficientStockError(Exception):
     pass
 
 
-def receipt_number(transaction_id, created_at):
-    """Canonical receipt/invoice number: INV-<year>-<6-digit id>.
+def receipt_number(transaction_id, created_at, stored=None):
+    """Canonical receipt/invoice number.
 
-    This is the single source of truth for that format. get_transaction()
-    attaches it to every txn dict as txn['receipt_number'], and
-    templates/receipts/receipt.html (the PDF) reads that same value
-    instead of recomputing it - so the number shown on the Sales History
-    page, the transaction detail page, and the printed/downloaded PDF can
-    never drift apart."""
+    `stored` is transactions.receipt_number when the caller already has
+    it - a real, randomly-generated, permanently stored code (see
+    _generate_receipt_number), immune to id collisions if a database is
+    ever merged with another. Always prefer passing it when available.
+
+    Falls back to the OLD id-derived 'INV-<year>-<6-digit id>' format
+    ONLY when `stored` is empty - i.e. a transaction created before the
+    receipt_number column existed. That keeps every already-printed
+    paper receipt's number exactly what it always was; nothing already
+    issued is ever renumbered by this change."""
+    if stored:
+        return stored
     year = (created_at or "")[:4] or "----"
     return f"INV-{year}-{int(transaction_id):06d}"
 
@@ -114,6 +143,28 @@ def create_transaction(lines, payments, receipt_requested=False, sale_date=None)
         )
         transaction_id = cur.lastrowid
 
+        # Generate + store the real receipt number now, once, rather
+        # than deriving it from transaction_id on every future read -
+        # see _generate_receipt_number's docstring for why. A UNIQUE
+        # constraint violation here means the random code collided with
+        # an existing one (astronomically unlikely at this alphabet/
+        # length) - just draw a new one and try again.
+        year = (sale_date or "")[:4] or datetime.now().strftime("%Y")
+        for _ in range(5):
+            candidate = _generate_receipt_number(year)
+            try:
+                cur.execute("UPDATE transactions SET receipt_number = ? WHERE id = ?",
+                            (candidate, transaction_id))
+                break
+            except sqlite3.IntegrityError:
+                continue
+        else:
+            raise RuntimeError("تعذر إنشاء رقم فاتورة فريد - حاول مرة أخرى.")
+
+        transaction_total = sum(
+            float(l.get("selling_price") or 0) * int(l.get("quantity") or 0) for l in lines
+        )
+
         for line in lines:
             product_id = line["product_id"]
             quantity = int(line["quantity"])
@@ -127,6 +178,15 @@ def create_transaction(lines, payments, receipt_requested=False, sale_date=None)
                         f"Only {row['quantity']} in stock for that product, cannot sell {quantity}."
                     )
                 cur.execute("UPDATE products SET quantity = quantity - ? WHERE id = ?", (quantity, product_id))
+                product_row = cur.execute("SELECT name FROM products WHERE id = ?", (product_id,)).fetchone()
+                product_audit.log_event(
+                    product_id, product_row["name"] if product_row else f"#{product_id}",
+                    "quantity_sale",
+                    quantity_before=row["quantity"], quantity_after=row["quantity"] - quantity,
+                    new_value=str(quantity), reference=str(transaction_id), reference_type="transaction",
+                    note=f"إجمالي الفاتورة: {transaction_total:.2f} ج.م", cur=cur,
+                )
+                product_audit.record_expected_returns_snapshot(cur=cur)
 
             warranty_days = line.get("warranty_days")
             # Resolve blank/None to the store's configured default *before*
@@ -238,8 +298,20 @@ def void_sale(sale_id):
 
         # Service lines never touched inventory on create — don't restore stock here.
         if not sale["service_description"]:
+            product_row = cur.execute("SELECT name, quantity FROM products WHERE id = ?", (sale["product_id"],)).fetchone()
             cur.execute("UPDATE products SET quantity = quantity + ? WHERE id = ?",
                         (sale["quantity"], sale["product_id"]))
+            if product_row:
+                txn_id = sale["transaction_id"]
+                product_audit.log_event(
+                    sale["product_id"], product_row["name"], "quantity_manual",
+                    quantity_before=product_row["quantity"], quantity_after=product_row["quantity"] + sale["quantity"],
+                    new_value=str(sale["quantity"]),
+                    reference=str(txn_id) if txn_id else None,
+                    reference_type="transaction" if txn_id else None,
+                    note="إلغاء بيع (void) — إرجاع الكمية للمخزون", cur=cur,
+                )
+                product_audit.record_expected_returns_snapshot(cur=cur)
         cur.execute("DELETE FROM warranties WHERE sale_id = ?", (sale_id,))
         cur.execute(
             "UPDATE sales SET is_voided = 1, voided_at = ? WHERE id = ?",
@@ -303,8 +375,20 @@ def _delete_sale_line_core(sale_id, quantity, cur):
 
     restore_stock = (not was_voided) and (not sale["service_description"])
     if restore_stock:
+        product_row = cur.execute("SELECT name, quantity FROM products WHERE id = ?", (sale["product_id"],)).fetchone()
         cur.execute("UPDATE products SET quantity = quantity + ? WHERE id = ?",
                     (quantity, sale["product_id"]))
+        if product_row:
+            txn_id = sale["transaction_id"]
+            product_audit.log_event(
+                sale["product_id"], product_row["name"], "quantity_manual",
+                quantity_before=product_row["quantity"], quantity_after=product_row["quantity"] + quantity,
+                new_value=str(quantity),
+                reference=str(txn_id) if txn_id else None,
+                reference_type="transaction" if txn_id else None,
+                note="حذف سطر بيع — إرجاع الكمية للمخزون", cur=cur,
+            )
+            product_audit.record_expected_returns_snapshot(cur=cur)
 
     fully_deleted = quantity >= full_quantity
     transaction_id = sale["transaction_id"]
@@ -486,7 +570,7 @@ def get_transaction(transaction_id):
     paid = sum(p["amount"] for p in txn["payments"])
     txn["paid"] = paid
     txn["remaining"] = max(txn["total"] - paid, 0)
-    txn["receipt_number"] = receipt_number(txn["id"], txn["created_at"])
+    txn["receipt_number"] = receipt_number(txn["id"], txn["created_at"], stored=txn.get("receipt_number"))
     return txn
 
 
@@ -505,6 +589,7 @@ def list_transactions(date_from=None, date_to=None, query=None):
         SELECT
             t.id AS transaction_id,
             t.created_at,
+            MAX(t.receipt_number) AS receipt_number,
             SUM(s.quantity) AS total_quantity,
             SUM(s.quantity * s.selling_price) AS total_amount,
             COALESCE((
@@ -547,7 +632,7 @@ def list_transactions(date_from=None, date_to=None, query=None):
         row["remaining_amount"] = max(total_amount - paid_amount, 0)
         row["product_names"] = row["product_names"] or ""
         row["payment_method"] = payment_method_map.get(row["transaction_id"])
-        row["receipt_number"] = receipt_number(row["transaction_id"], row["created_at"])
+        row["receipt_number"] = receipt_number(row["transaction_id"], row["created_at"], stored=row.get("receipt_number"))
 
     if query:
         rows = _filter_transaction_rows(rows, query)

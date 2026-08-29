@@ -160,8 +160,22 @@ CREATE INDEX idx_sales_customer_id ON sales(customer_id);
 CREATE TABLE transactions (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now')),
-    receipt_requested INTEGER NOT NULL DEFAULT 0
+    receipt_requested INTEGER NOT NULL DEFAULT 0,
+    receipt_number    TEXT    -- 'INV-<year>-<6-char random code>', generated once at creation
+                              -- (see app/services/sales.py:_generate_receipt_number) and never
+                              -- recomputed from `id` afterward - unlike the old id-derived format,
+                              -- this is immune to id collisions if a database is ever merged with
+                              -- another (two merged databases can both have an id=123, but can
+                              -- never independently generate the same random code). NULL for any
+                              -- transaction created before this column existed; receipt_number()
+                              -- falls back to the legacy id-derived format for those specifically,
+                              -- so no already-printed paper receipt's number ever changes.
 );
+
+-- Enforced only among transactions that HAVE a receipt_number (a partial
+-- index, so old NULL-valued rows from before this column existed never
+-- conflict with each other or with anything new).
+CREATE UNIQUE INDEX idx_transactions_receipt_number ON transactions(receipt_number) WHERE receipt_number IS NOT NULL;
 
 CREATE TABLE sale_payments (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -357,3 +371,62 @@ INSERT INTO delivery_providers (slug, name, is_builtin, sort_order) VALUES
     ('egypt_post', 'البريد المصري', 1, 1),
     ('bosta', 'بوسطة', 1, 2),
     ('raymond', 'رايموند', 1, 3);
+
+-- ============================================================
+-- PRODUCT AUDIT LOG
+-- Every meaningful change to a product: created, removed (soft
+-- delete), quantity changed (sale / manual / damaged-هالك), selling
+-- price changed, purchase price changed, name changed, specs changed.
+-- product_id is kept nullable-in-spirit (still a real FK, but ON
+-- DELETE SET NULL - products are only ever soft-deleted in this app,
+-- never hard-deleted, but SET NULL keeps this table correct even if
+-- that ever changes) and product_name is a frozen snapshot, so a
+-- historical entry stays fully readable even if the product row it
+-- refers to is later gone. old_value/new_value are free-form TEXT
+-- (numbers stored as their string form) since different event_types
+-- need different shapes - the UI decides how to render each
+-- event_type rather than the schema trying to model every case as its
+-- own column.
+-- ============================================================
+
+CREATE TABLE product_audit_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id    INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    product_name  TEXT NOT NULL,
+    event_type    TEXT NOT NULL,   -- created | removed | quantity_sale | quantity_manual | quantity_damaged | price_selling | price_purchase | name_changed | specs_changed
+    field         TEXT,            -- which field changed, for the generic-edit events (e.g. 'selling_price')
+    old_value     TEXT,
+    new_value     TEXT,
+    quantity_before INTEGER,
+    quantity_after  INTEGER,
+    reference     TEXT,            -- related receipt/sale/order id, when applicable
+    reference_type TEXT,           -- 'transaction' when `reference` is a transaction_id (links to the invoice); NULL otherwise (event links to the product itself, via product_id)
+    note          TEXT,
+    username      TEXT,            -- session username at the time of the action, if available
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_product_audit_product ON product_audit_log(product_id);
+CREATE INDEX idx_product_audit_created ON product_audit_log(created_at);
+CREATE INDEX idx_product_audit_event ON product_audit_log(event_type);
+
+-- ============================================================
+-- EXPECTED RETURNS DAILY SNAPSHOT
+-- One row per calendar day: SUM(quantity * selling_price) over every
+-- currently-sellable product (same population as
+-- owner_dashboard.purchases_vs_expected's live query), captured at the
+-- moment it last changed that day. This is what lets the "Expected
+-- Returns" chart show a real trend instead of repeating today's value
+-- across every historical bucket - see
+-- app/services/products.py:record_expected_returns_snapshot(), called
+-- after every inventory-affecting product mutation. History only
+-- exists from the day this feature shipped onward; there is
+-- deliberately no backfill for earlier dates.
+-- ============================================================
+
+CREATE TABLE expected_returns_daily (
+    snapshot_date TEXT PRIMARY KEY,   -- 'YYYY-MM-DD'
+    value         REAL NOT NULL DEFAULT 0,
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+

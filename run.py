@@ -111,6 +111,19 @@ TAILSCALE_API_RETRIES = 2        # extra attempts on transient failures (not on 
 TAILSCALE_API_RETRY_DELAY = 2    # seconds between retries
 TAILSCALE_POST_DELETE_SETTLE = 2  # seconds to wait before re-querying after a delete
 
+# How many full detect-conflict -> clean-up -> claim-hostname -> verify
+# passes perform_tailscale_repair will run before giving up on THIS
+# invocation. More than 1 is needed because a single pass isn't reliable
+# enough on its own: even after the API confirms a duplicate device is
+# deleted, Tailscale's control-plane hostname-uniqueness index can take
+# a moment longer to actually release the name, so the very next
+# `tailscale set --hostname=` can still lose that race and get silently
+# suffixed ("-1", "-2", ...) - and once that's happened, THIS device is
+# now itself stuck on the suffixed name until someone reruns the fix.
+# Retrying the whole sequence (not just the final claim) self-heals
+# that without requiring the user to click "Fix Problems" again.
+TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS = 3
+
 # How long a same-hostname candidate device must have been unseen before
 # it's treated as safely-dead rather than possibly-still-live. Repeatedly
 # re-imaging/rebuilding this app's target machine (e.g. during testing)
@@ -1024,6 +1037,104 @@ def _repair_log_writer(log_path):
     return write
 
 
+def _detect_and_clean_hostname_conflict(hostname, self_id, log):
+    """One detect -> clean-up pass: looks for another device already
+    using `hostname` and, if the Tailscale API is configured, removes
+    any that are confirmed stale duplicates (see
+    find_duplicate_device_via_api's safety checks). Returns
+    conflict_or_None - None means `hostname` is currently free to
+    claim; a dict means it's still taken and perform_tailscale_repair's
+    caller should not attempt `tailscale set --hostname=` yet.
+
+    Pulled out of perform_tailscale_repair() so it can be re-run as
+    part of a retry loop there instead of only once per repair run -
+    see TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS for why a single pass isn't
+    reliable enough on its own."""
+    conflict, err = find_conflicting_tailscale_device(hostname, self_id=self_id)
+    if err:
+        log(f"      [WARN] Could not check for conflicts: {err}")
+        return conflict
+    if not conflict:
+        log(f"      [OK] No other device is using {hostname}.")
+        return None
+
+    log(f"      [WARN] Another device is already using {hostname}:")
+    log(f"          Name:      {conflict.get('DNSName') or conflict.get('HostName')}")
+    log(f"          Last seen: {conflict.get('LastSeen', 'unknown')}")
+    log(f"          Online:    {conflict.get('Online', 'unknown')}")
+
+    # current_device is built from local `tailscale status` (self_id,
+    # already established by the caller) - never from the API - so the
+    # "current device" identity is trusted before any API call is made,
+    # per the safety requirement.
+    self_info, _, _ = get_tailscale_status_full()
+    current_hostname = (self_info or {}).get("HostName", "")
+    current_device = {"id": self_id, "hostname": current_hostname}
+
+    if not (Config.TAILSCALE_OAUTH_CLIENT_ID and Config.TAILSCALE_OAUTH_CLIENT_SECRET):
+        log("      [ERROR] Tailscale OAuth credentials are not configured.")
+        log("      This app will not remove devices without successful API authentication.")
+        log("      Remove or rename it in the admin console, then click Fix Problems again:")
+        log(f"          {TAILSCALE_ADMIN_MACHINES_URL}")
+        return conflict
+    if not self_id:
+        log("      [FAILED] Current device identity is not established - refusing to remove anything.")
+        return conflict
+
+    token, token_err = _get_tailscale_oauth_token()
+    if token_err:
+        log(f"      [ERROR] Unable to authenticate with Tailscale API: {token_err}")
+        log("      No device removed.")
+        return conflict
+
+    log("      Verifying device identity via the Tailscale API...")
+    duplicates, dup_err = find_duplicate_device_via_api(hostname, current_device, token)
+    if dup_err:
+        log(f"      [WARN] {dup_err}")
+        log("      No device removed - see the message above.")
+        return conflict
+    if not duplicates:
+        log("      [OK] API found no confirmed duplicate (conflict may have just cleared).")
+        return None
+
+    if len(duplicates) > 1:
+        log(f"      Found {len(duplicates)} stale devices all using {hostname} (likely left over from previous rebuilds/reinstalls of this machine) - all confirmed not the current device and not recently active.")
+    remaining_ids = []
+    for duplicate in duplicates:
+        dup_id = duplicate.get("nodeId") or duplicate.get("id")
+        log(f"      Verifying device identity... confirmed this is NOT the current device (id={dup_id}).")
+        log(f"      Removing stale conflicting device (id={dup_id}) because it conflicts with the required {hostname} identity...")
+        removed_ok, remove_err = remove_tailscale_device_via_api(dup_id, token)
+        if not removed_ok:
+            log(f"      [FAILED] Could not remove the conflicting device: {remove_err}")
+            remaining_ids.append(dup_id)
+        else:
+            log("      [OK] Device removed.")
+
+    if remaining_ids:
+        log(f"      [WARN] {len(remaining_ids)} conflicting device(s) could not be removed - {hostname} may still conflict.")
+        return conflict
+
+    # Don't trust the deletes alone - re-query and only treat the name
+    # as free once the Tailnet itself confirms every removed device is
+    # actually gone, retrying once if any is still listed right away.
+    removed_ids = {duplicate.get("nodeId") or duplicate.get("id") for duplicate in duplicates}
+    time.sleep(TAILSCALE_POST_DELETE_SETTLE)
+    devices_after, _ = list_tailnet_devices(token)
+    still_listed = removed_ids & {(d.get("nodeId") or d.get("id")) for d in (devices_after or [])}
+    if still_listed:
+        log("      Still listed immediately after removal - waiting and re-checking...")
+        time.sleep(TAILSCALE_POST_DELETE_SETTLE)
+        devices_after, _ = list_tailnet_devices(token)
+        still_listed = removed_ids & {(d.get("nodeId") or d.get("id")) for d in (devices_after or [])}
+    if still_listed:
+        log(f"      [WARN] {len(still_listed)} device(s) still listed after removal - {hostname} may still conflict.")
+        return conflict
+
+    log(f"      [OK] {hostname} is now free.")
+    return None
+
+
 def perform_tailscale_repair(hostname, log):
     """Runs the full Tailscale repair flow end-to-end, reporting each
     step through log(line) as it goes. Every step queries real Tailscale
@@ -1102,15 +1213,18 @@ def perform_tailscale_repair(hostname, log):
         log("      [OK] Connected and logged in.")
     log("")
 
-    # ---- [4/6] Duplicate device check + automated cleanup via API ----
-    # This has to run BEFORE the hostname is claimed below: if another
-    # device is still using `hostname` at the moment `tailscale set
-    # --hostname=` runs, Tailscale doesn't reject the request - it
+    # ---- [4/6] + [5/6] Conflict cleanup + hostname claim ----
+    # This whole detect -> clean -> claim -> verify sequence has to run
+    # as a unit, and be retried as a unit, not just attempted once: if
+    # another device is still using `hostname` at the moment `tailscale
+    # set --hostname=` runs, Tailscale doesn't reject the request - it
     # silently appends "-1" (then "-2", etc.) to make it unique, so the
     # name actually assigned is never the plain `hostname` this app
-    # depends on for a fixed link. Any conflicting device must be
-    # confirmed gone first.
-    log("[4/6] Checking Tailnet for a conflicting device...")
+    # depends on for a fixed link. And even right after the API confirms
+    # a duplicate device is deleted, Tailscale's control-plane name index
+    # can take a moment longer to actually release it, so a single
+    # detect-then-claim pass can still lose that race. See
+    # TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS.
     self_info, _, err = get_tailscale_status_full()
     if self_info is None:
         log(f"      [FAILED] Could not read Tailscale status: {err}")
@@ -1118,110 +1232,40 @@ def perform_tailscale_repair(hostname, log):
     current_hostname = self_info.get("HostName", "")
     self_id = self_info.get("ID")
 
-    conflict, err = find_conflicting_tailscale_device(hostname, self_id=self_id)
-    if err:
-        log(f"      [WARN] Could not check for conflicts: {err}")
-    elif conflict:
-        log(f"      [WARN] Another device is already using {hostname}:")
-        log(f"          Name:      {conflict.get('DNSName') or conflict.get('HostName')}")
-        log(f"          Last seen: {conflict.get('LastSeen', 'unknown')}")
-        log(f"          Online:    {conflict.get('Online', 'unknown')}")
+    conflict = None
+    for attempt in range(1, TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS + 1):
+        suffix = "" if attempt == 1 else f", retry {attempt - 1}"
 
-        # current_device is built from local `tailscale status` (self_id/
-        # current_hostname, already established above) - never from the
-        # API - so the "current device" identity is trusted before any
-        # API call is made, per the safety requirement.
-        current_device = {"id": self_id, "hostname": current_hostname}
+        log(f"[4/6{suffix}] Checking Tailnet for a conflicting device...")
+        conflict = _detect_and_clean_hostname_conflict(hostname, self_id, log)
+        log("")
 
-        if not (Config.TAILSCALE_OAUTH_CLIENT_ID and Config.TAILSCALE_OAUTH_CLIENT_SECRET):
-            log("      [ERROR] Tailscale OAuth credentials are not configured.")
-            log("      This app will not remove devices without successful API authentication.")
-            log("      Remove or rename it in the admin console, then click Fix Problems again:")
-            log(f"          {TAILSCALE_ADMIN_MACHINES_URL}")
-        elif not self_id:
-            log("      [FAILED] Current device identity is not established - refusing to remove anything.")
-        else:
-            token, token_err = _get_tailscale_oauth_token()
-            if token_err:
-                log(f"      [ERROR] Unable to authenticate with Tailscale API: {token_err}")
-                log("      No device removed.")
-            else:
-                log("      Verifying device identity via the Tailscale API...")
-                duplicates, dup_err = find_duplicate_device_via_api(hostname, current_device, token)
-                if dup_err:
-                    log(f"      [WARN] {dup_err}")
-                    log("      No device removed - see the message above.")
-                elif not duplicates:
-                    log("      [OK] API found no confirmed duplicate (conflict may have just cleared).")
-                    conflict = None
-                else:
-                    if len(duplicates) > 1:
-                        log(f"      Found {len(duplicates)} stale devices all using {hostname} (likely left over from previous rebuilds/reinstalls of this machine) - all confirmed not the current device and not recently active.")
-                    remaining_ids = []
-                    for duplicate in duplicates:
-                        dup_id = duplicate.get("nodeId") or duplicate.get("id")
-                        log(f"      Verifying device identity... confirmed this is NOT the current device (id={dup_id}).")
-                        log(f"      Removing stale conflicting device (id={dup_id}) because it conflicts with the required {hostname} identity...")
-                        removed_ok, remove_err = remove_tailscale_device_via_api(dup_id, token)
-                        if not removed_ok:
-                            log(f"      [FAILED] Could not remove the conflicting device: {remove_err}")
-                            remaining_ids.append(dup_id)
-                        else:
-                            log("      [OK] Device removed.")
+        log(f"[5/6{suffix}] Setting device hostname...")
+        if current_hostname.lower() == hostname.lower():
+            log(f"      [OK] Hostname is already {hostname}.")
+            log("")
+            break
 
-                    if remaining_ids:
-                        log(f"      [WARN] {len(remaining_ids)} conflicting device(s) could not be removed - {hostname} may still conflict.")
-                    else:
-                        # Don't trust the deletes alone - re-query and only
-                        # treat the name as free once the Tailnet itself
-                        # confirms every removed device is actually gone,
-                        # retrying once if any is still listed right away.
-                        removed_ids = {duplicate.get("nodeId") or duplicate.get("id") for duplicate in duplicates}
-                        time.sleep(TAILSCALE_POST_DELETE_SETTLE)
-                        devices_after, _ = list_tailnet_devices(token)
-                        still_listed = removed_ids & {
-                            (d.get("nodeId") or d.get("id")) for d in (devices_after or [])
-                        }
-                        if still_listed:
-                            log("      Still listed immediately after removal - waiting and re-checking...")
-                            time.sleep(TAILSCALE_POST_DELETE_SETTLE)
-                            devices_after, _ = list_tailnet_devices(token)
-                            still_listed = removed_ids & {
-                                (d.get("nodeId") or d.get("id")) for d in (devices_after or [])
-                            }
-                        if still_listed:
-                            log(f"      [WARN] {len(still_listed)} device(s) still listed after removal - {hostname} may still conflict.")
-                        else:
-                            log(f"      [OK] {hostname} is now free.")
-                            conflict = None
-    else:
-        log(f"      [OK] No other device is using {hostname}.")
-    log("")
-
-    # ---- [5/6] Hostname ----
-    # Only claimed here, after [4/6] has confirmed no other device is
-    # still holding it - see the note above on why the order matters.
-    log("[5/6] Setting device hostname...")
-    if current_hostname.lower() == hostname.lower():
-        log(f"      [OK] Hostname is already {hostname}.")
-    else:
         log(f"      Current hostname is '{current_hostname or 'unknown'}' - setting it to {hostname}...")
         ok, output = set_tailscale_hostname(hostname)
         if not ok:
             log(f"      [FAILED] Could not set hostname: {output}")
             return {"ok": False, "message": f"Could not set hostname: {output}", "conflict": conflict}
+
         self_info, _, err = get_tailscale_status_full()
         current_hostname = (self_info or {}).get("HostName", "")
         if current_hostname.lower() == hostname.lower():
             log(f"      [OK] Hostname set to {hostname}.")
-        else:
-            log(f"      [WARN] Tailscale assigned '{current_hostname}' instead - {hostname} is already taken.")
-            if conflict is None:
-                # We believed the name was free, but Tailscale still
-                # refused the plain hostname - surface this as a conflict
-                # again instead of silently reporting success.
-                conflict = {"HostName": current_hostname}
-    log("")
+            conflict = None
+            log("")
+            break
+
+        log(f"      [WARN] Tailscale assigned '{current_hostname}' instead - {hostname} is already taken.")
+        conflict = conflict or {"HostName": current_hostname}
+        if attempt < TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS:
+            log(f"      Waiting for the name to fully release, then trying again ({attempt}/{TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS})...")
+            time.sleep(TAILSCALE_POST_DELETE_SETTLE)
+        log("")
 
     # ---- [6/6] Final verification ----
     log("[6/6] Final verification...")

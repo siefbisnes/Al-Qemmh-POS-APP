@@ -7,7 +7,12 @@
     <h1>لوحة التحكم</h1>
     <p class="subtitle">{{ products|length }} عنصر في العرض</p>
   </div>
-  <a href="{{ url_for('products.new') }}" class="btn btn-primary">+ إضافة منتج</a>
+  <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+    {% if is_admin %}
+    <a href="{{ url_for('products.audit_log') }}" class="btn">سجل التغييرات</a>
+    {% endif %}
+    <a href="{{ url_for('products.new') }}" class="btn btn-primary">+ إضافة منتج</a>
+  </div>
 </div>
 
 <form class="toolbar" method="get">

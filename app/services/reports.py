@@ -166,11 +166,11 @@ def date_range_summary(date_from=None, date_to=None):
     NOT be included in realized net profit.
 
     Two profit metrics are now calculated:
-    
+
     1. realized_net_profit: Profit from money that has actually been collected.
        This is the "true" current profit figure, calculated as:
        Realized Revenue - Realized COGS - Expenses - Writeoff cost (+ manual adj)
-       
+
        Where Realized Revenue = sum of payments actually received per transaction
        And Realized COGS = COGS proportion of the paid amount only.
 
@@ -237,7 +237,7 @@ def date_range_summary(date_from=None, date_to=None):
             total_sale = float(row["total_sale_amount"] or 0)
             paid = float(row["paid_amount"] or 0)
             total_cogs_for_tx = float(row["total_cogs"] or 0)
-            
+
             if total_sale > 0:
                 # Only count the COGS proportion for what was actually paid
                 paid_ratio = min(paid / total_sale, 1.0)  # Cap at 1.0 for overpayments
@@ -304,13 +304,16 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
     from app.services import purchases as purchase_service
     from app.services import adjustments as adjustment_service
     from app.services import writeoffs as writeoff_service
+    from app.services.sales import receipt_number
+    from flask import url_for
 
     entries = []
 
     sales_query = """SELECT s.id AS id, s.sale_date AS date, s.transaction_id, s.quantity,
-                             s.selling_price,
+                             s.selling_price, t.receipt_number AS stored_receipt_number,
                              COALESCE(NULLIF(TRIM(s.custom_product_name), ''), s.service_description, p.name) AS product_name
                       FROM sales s JOIN products p ON p.id = s.product_id
+                      LEFT JOIN transactions t ON t.id = s.transaction_id
                       WHERE s.is_voided = 0"""
     sales_params = []
     if date_from:
@@ -321,10 +324,19 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
         sales_params.append(date_to)
     with db_cursor() as cur:
         for r in cur.execute(sales_query, sales_params).fetchall():
-            label = f"Invoice #{r['transaction_id']} - {r['quantity']}x {r['product_name']}" \
-                if r["transaction_id"] else f"{r['quantity']}x {r['product_name']}"
+            # Same canonical receipt number shown on Sales History, the
+            # transaction detail page, and the printed receipt
+            # (receipt_number()) - a bare transaction_id ("4") is
+            # meaningless to a shop owner on its own.
+            if r["transaction_id"]:
+                invoice_label = receipt_number(r["transaction_id"], r["date"], stored=r["stored_receipt_number"])
+                label = f"{invoice_label} - {r['quantity']}x {r['product_name']}"
+                url = url_for("sales.transaction_detail", transaction_id=r["transaction_id"])
+            else:
+                label = f"{r['quantity']}x {r['product_name']}"
+                url = None
             entries.append({"id": r["id"], "date": r["date"], "type": "sale", "description": label,
-                             "debit": 0, "credit": r["quantity"] * r["selling_price"]})
+                             "url": url, "debit": 0, "credit": r["quantity"] * r["selling_price"]})
 
     for p in purchase_service.list_purchases(date_from, date_to):
         entries.append({"id": p["id"], "date": p["purchase_date"], "type": "purchase",
@@ -351,8 +363,34 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
             "credit": a["amount"] if a["amount"] > 0 else 0,
         })
 
-    entries.sort(key=lambda e: e["date"], reverse=True)
+    _sort_ledger_entries(entries)
     return {"entries": entries, "grouped": _group_ledger(entries, group_by)}
+
+
+def _normalize_ledger_date(date_str):
+    """Normalizes the date/time separator only (never the digits): some
+    entries are stamped by SQLite's own datetime('now') default, which
+    uses a plain space between date and time ('2026-08-28 10:00:00');
+    write-offs created without an explicit writeoff_date are instead
+    stamped in Python via datetime.now().isoformat() (see
+    app/services/writeoffs.py:create_writeoff), which uses a literal
+    'T' separator ('2026-08-28T10:00:00'). Sorting those two formats
+    together as raw strings is wrong - 'T' (0x54) sorts after a space
+    (0x20), so a same-day write-off could look chronologically LATER
+    than a sale from hours afterward purely because of the separator
+    character, not the actual time. Replacing only the separator makes
+    every entry's date string directly, correctly comparable."""
+    return (date_str or "").replace("T", " ", 1)
+
+
+def _sort_ledger_entries(entries):
+    """Newest first. Primary key is the (format-normalized) date/time;
+    ties - entries sharing the exact same timestamp - fall back to id,
+    a deterministic secondary order, per spec, rather than whatever
+    order they happened to be appended to `entries` in above (which
+    silently grouped same-timestamp entries by type: all sales, then
+    all purchases, etc. - not a real ordering guarantee)."""
+    entries.sort(key=lambda e: (_normalize_ledger_date(e["date"]), e["id"]), reverse=True)
 
 
 def _period_key(date_str, group_by):

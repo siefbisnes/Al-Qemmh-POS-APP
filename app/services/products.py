@@ -7,6 +7,7 @@ from flask import current_app
 from PIL import Image
 
 from app.db import db_cursor
+from app.services import product_audit
 
 
 # ---------- queries ----------
@@ -214,6 +215,14 @@ def create_product(category_id, name, grade, quantity, description,
         )
         product_id = cur.lastrowid
         _save_specifications(cur, product_id, spec_values)
+
+        if source != "service_placeholder":
+            product_audit.log_event(
+                product_id, name, "created",
+                new_value=f"كمية: {quantity} · شراء: {purchase_price} · بيع: {selling_price}",
+                quantity_after=quantity, cur=cur,
+            )
+            product_audit.record_expected_returns_snapshot(cur=cur)
     return product_id
 
 
@@ -221,6 +230,18 @@ def update_product(product_id, category_id, name, grade, quantity, description,
                     purchase_price, selling_price, spec_values):
     _validate_product_values(quantity, purchase_price, selling_price)
     with db_cursor(commit=True) as cur:
+        before = cur.execute(
+            "SELECT name, quantity, description, purchase_price, selling_price FROM products WHERE id = ?",
+            (product_id,),
+        ).fetchone()
+        before_specs = {
+            r["category_field_id"]: r["value"]
+            for r in cur.execute(
+                "SELECT category_field_id, value FROM specifications WHERE product_id = ?",
+                (product_id,),
+            ).fetchall()
+        }
+
         cur.execute(
             """UPDATE products SET category_id = ?, name = ?, grade = ?, quantity = ?, description = ?,
                purchase_price = ?, selling_price = ? WHERE id = ?""",
@@ -228,6 +249,55 @@ def update_product(product_id, category_id, name, grade, quantity, description,
         )
         cur.execute("DELETE FROM specifications WHERE product_id = ?", (product_id,))
         _save_specifications(cur, product_id, spec_values)
+
+        if before:
+            _log_update_diff(cur, product_id, before, before_specs, name, quantity, description,
+                              purchase_price, selling_price, spec_values or {})
+            product_audit.record_expected_returns_snapshot(cur=cur)
+
+
+def _log_update_diff(cur, product_id, before, before_specs, new_name, new_quantity, new_description,
+                      new_purchase_price, new_selling_price, new_spec_values):
+    """Compares the row/specs read before the UPDATE above against the
+    new values just written, and logs exactly which of these
+    user-facing fields actually changed - never a generic "product
+    updated" entry. Called from within update_product()'s existing
+    transaction (shares its `cur`), so this never opens a second
+    transaction on the same request-scoped connection."""
+    if str(before["name"] or "") != str(new_name or ""):
+        product_audit.log_event(product_id, new_name, "name_changed",
+                                 old_value=before["name"], new_value=new_name, cur=cur)
+
+    old_qty = before["quantity"]
+    if old_qty != new_quantity:
+        product_audit.log_event(
+            product_id, new_name, "quantity_manual",
+            quantity_before=old_qty, quantity_after=new_quantity,
+            new_value=str(new_quantity - (old_qty or 0)), cur=cur,
+        )
+
+    old_selling = float(before["selling_price"] or 0)
+    if abs(old_selling - float(new_selling_price or 0)) > 0.009:
+        product_audit.log_event(product_id, new_name, "price_selling",
+                                 old_value=old_selling, new_value=new_selling_price, cur=cur)
+
+    old_purchase = float(before["purchase_price"] or 0)
+    if abs(old_purchase - float(new_purchase_price or 0)) > 0.009:
+        product_audit.log_event(product_id, new_name, "price_purchase",
+                                 old_value=old_purchase, new_value=new_purchase_price, cur=cur)
+
+    new_specs_normalized = {str(k): v for k, v in (new_spec_values or {}).items() if v not in (None, "")}
+    old_specs_normalized = {str(k): v for k, v in (before_specs or {}).items()}
+    specs_changed = old_specs_normalized != new_specs_normalized
+    description_changed = str(before["description"] or "") != str(new_description or "")
+    if specs_changed or description_changed:
+        product_audit.log_event(
+            product_id, new_name, "specs_changed",
+            old_value=before["description"] if description_changed else None,
+            new_value=new_description if description_changed else None,
+            note="تم تعديل المواصفات" if specs_changed else None,
+            cur=cur,
+        )
 
 
 def _save_specifications(cur, product_id, spec_values):
@@ -242,7 +312,19 @@ def _save_specifications(cur, product_id, spec_values):
 
 def soft_delete_product(product_id):
     with db_cursor(commit=True) as cur:
+        before = cur.execute(
+            "SELECT name, quantity, purchase_price, selling_price FROM products WHERE id = ?",
+            (product_id,),
+        ).fetchone()
         cur.execute("UPDATE products SET is_active = 0 WHERE id = ?", (product_id,))
+        if before:
+            product_audit.log_event(
+                product_id, before["name"], "removed",
+                quantity_before=before["quantity"], quantity_after=0,
+                old_value=f"كمية: {before['quantity']} · شراء: {before['purchase_price']} · بيع: {before['selling_price']}",
+                cur=cur,
+            )
+            product_audit.record_expected_returns_snapshot(cur=cur)
 
 
 def _validate_product_values(quantity, purchase_price, selling_price):
@@ -262,8 +344,21 @@ def _validate_product_values(quantity, purchase_price, selling_price):
             raise ValueError(f"{label} لا يمكن أن يكون سالبًا.")
 
 
-def adjust_quantity(product_id, delta, cur=None):
-    """delta can be negative (sale) or positive (restock)."""
+def adjust_quantity(product_id, delta, cur=None, event_type=None, reference=None, note=None):
+    """delta can be negative (sale) or positive (restock).
+
+    event_type lets a caller be explicit about why (e.g. "quantity_sale"
+    with reference=receipt_number from the sales service); when omitted,
+    it's inferred as "quantity_sale" for delta<0 and "quantity_manual"
+    for delta>0, matching this function's existing sale/restock usage.
+
+    When called with `cur` (i.e. as part of a larger transaction, such
+    as a multi-line sale), the audit log entry and Expected Returns
+    snapshot are written through that SAME cursor, uncommitted, so they
+    become durable together with the rest of that transaction when the
+    caller commits - never as a separate commit here. See
+    app/services/product_audit.py's module docstring for why a second
+    commit on the same connection would be unsafe."""
     try:
         delta = int(delta)
     except (TypeError, ValueError):
@@ -271,8 +366,20 @@ def adjust_quantity(product_id, delta, cur=None):
     if delta == 0:
         return
 
+    resolved_event_type = event_type or ("quantity_sale" if delta < 0 else "quantity_manual")
+
     def _run(c):
+        row = c.execute("SELECT name, quantity FROM products WHERE id = ?", (product_id,)).fetchone()
+        before_qty = row["quantity"] if row else None
+        name = row["name"] if row else f"#{product_id}"
         c.execute("UPDATE products SET quantity = quantity + ? WHERE id = ?", (delta, product_id))
+        after_qty = (before_qty + delta) if before_qty is not None else None
+        product_audit.log_event(
+            product_id, name, resolved_event_type,
+            quantity_before=before_qty, quantity_after=after_qty,
+            new_value=str(abs(delta)), reference=reference, note=note, cur=c,
+        )
+        product_audit.record_expected_returns_snapshot(cur=c)
 
     if cur is not None:
         _run(cur)
@@ -298,12 +405,18 @@ def remove_stock(product_id, quantity):
         raise ValueError("الكمية يجب أن تكون أكبر من صفر.")
 
     with db_cursor(commit=True) as cur:
-        row = cur.execute("SELECT quantity FROM products WHERE id = ?", (product_id,)).fetchone()
+        row = cur.execute("SELECT name, quantity FROM products WHERE id = ?", (product_id,)).fetchone()
         if row is None:
             raise ValueError("المنتج غير موجود.")
         if quantity > row["quantity"]:
             raise ValueError(f"لا يمكن مرتجع {quantity} وحدة، الموجود بالمخزون {row['quantity']} فقط.")
         cur.execute("UPDATE products SET quantity = quantity - ? WHERE id = ?", (quantity, product_id))
+        product_audit.log_event(
+            product_id, row["name"], "quantity_manual",
+            quantity_before=row["quantity"], quantity_after=row["quantity"] - quantity,
+            new_value=str(-quantity), note="إزالة يدوية من المخزون", cur=cur,
+        )
+        product_audit.record_expected_returns_snapshot(cur=cur)
 
 
 # ---------- images ----------

@@ -621,6 +621,67 @@ MIGRATIONS = [
     ("orders.shipping_offset_purchase_id", """
         ALTER TABLE orders ADD COLUMN shipping_offset_purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL
     """),
+    # ---- Product audit log (see schema.sql for the full column-by-
+    # column rationale) ----
+    ("product_audit_log table", """
+        CREATE TABLE IF NOT EXISTS product_audit_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id      INTEGER REFERENCES products(id) ON DELETE SET NULL,
+            product_name    TEXT NOT NULL,
+            event_type      TEXT NOT NULL,
+            field           TEXT,
+            old_value       TEXT,
+            new_value       TEXT,
+            quantity_before INTEGER,
+            quantity_after  INTEGER,
+            reference       TEXT,
+            reference_type  TEXT,
+            note            TEXT,
+            username        TEXT,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """),
+    ("idx_product_audit_product", """
+        CREATE INDEX IF NOT EXISTS idx_product_audit_product ON product_audit_log(product_id)
+    """),
+    ("idx_product_audit_created", """
+        CREATE INDEX IF NOT EXISTS idx_product_audit_created ON product_audit_log(created_at)
+    """),
+    ("idx_product_audit_event", """
+        CREATE INDEX IF NOT EXISTS idx_product_audit_event ON product_audit_log(event_type)
+    """),
+    # CREATE TABLE IF NOT EXISTS above is a no-op on a database that
+    # already has product_audit_log from before reference_type existed
+    # - this ALTER TABLE is what actually adds the column there. The
+    # runner tolerates a "duplicate column" error on databases that
+    # already have it (either from a fresh CREATE TABLE above, or a
+    # previous run of this exact migration), so this is safe to run
+    # every startup.
+    ("product_audit_log.reference_type", """
+        ALTER TABLE product_audit_log ADD COLUMN reference_type TEXT
+    """),
+    # ---- Stored, collision-safe receipt numbers (see schema.sql for
+    # the full rationale) - replaces computing INV-<year>-<id> from the
+    # transactions.id primary key on the fly, which breaks if two
+    # databases are ever merged (id sequences can collide across
+    # separate databases; a randomly-generated stored code cannot). ----
+    ("transactions.receipt_number", """
+        ALTER TABLE transactions ADD COLUMN receipt_number TEXT
+    """),
+    ("idx_transactions_receipt_number", """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_receipt_number
+        ON transactions(receipt_number) WHERE receipt_number IS NOT NULL
+    """),
+    # ---- Expected Returns daily snapshot (see schema.sql for the full
+    # rationale) - no backfill inserted here on purpose: an old database
+    # simply has no rows before today, which is correct, not a bug. ----
+    ("expected_returns_daily table", """
+        CREATE TABLE IF NOT EXISTS expected_returns_daily (
+            snapshot_date TEXT PRIMARY KEY,
+            value         REAL NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """),
 ]
 
 

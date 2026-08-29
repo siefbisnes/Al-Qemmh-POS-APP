@@ -172,7 +172,7 @@
       {% elif e.type == 'writeoff' %}<span class="badge badge-muted">هالك</span>
       {% else %}<span class="badge badge-muted">تعديل</span>{% endif %}
     </td>
-    <td>{{ e.description }}</td>
+    <td>{% if e.url %}<a href="{{ e.url }}">{{ e.description }}</a>{% else %}{{ e.description }}{% endif %}</td>
     <td>{{ e.debit|money if e.debit else '' }}</td>
     <td>{{ e.credit|money if e.credit else '' }}</td>
     <td class="action-cell">

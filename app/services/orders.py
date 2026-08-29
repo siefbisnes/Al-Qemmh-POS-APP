@@ -36,6 +36,13 @@ class OrderError(ValueError):
     pass
 
 
+def _money(value):
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 # ---------- providers ----------
 
 def list_providers():
@@ -192,6 +199,7 @@ def list_orders(search=None):
     sql = """
         SELECT o.*,
                t.created_at AS transaction_created_at,
+               t.receipt_number AS transaction_receipt_number,
                MAX(s.customer_name) AS customer_name,
                MAX(s.customer_phone) AS customer_phone,
                SUM(s.quantity * s.selling_price) AS transaction_total
@@ -205,7 +213,9 @@ def list_orders(search=None):
         rows = [dict(r) for r in cur.execute(sql).fetchall()]
 
     for row in rows:
-        row["receipt_number"] = sales_service.receipt_number(row["transaction_id"], row["transaction_created_at"])
+        row["receipt_number"] = sales_service.receipt_number(
+            row["transaction_id"], row["transaction_created_at"], stored=row.get("transaction_receipt_number")
+        )
         row["status_label"] = STATUS_LABELS_AR.get(row["status"], row["status"])
 
     if search:
@@ -310,12 +320,22 @@ def _set_status(order_id, from_status, to_status):
 
 # ---------- financial completion (وصل + payment confirmation) ----------
 
-def confirm_payment(order_id, payment_method, transfer_image_path=None):
+def confirm_payment(order_id, payment_method, transfer_image_path=None, payment_amount=None):
     """Only allowed once status == 'delivered'. Writes a normal
     sale_payments row for the order's transaction (reusing the existing
     payment system) and stamps financially_completed_at, which is what
     removes the transaction from pending_order_* exclusion everywhere in
     Reports / Owner Dashboard.
+
+    payment_amount lets the cashier confirm for LESS than the order's
+    snapshot order_amount (customer paid less than agreed at وصل). When
+    omitted/None, behaves exactly as before - full order_amount is paid.
+    A shortfall still stamps financially_completed_at (the order is
+    considered "closed" either way per spec §21/§11), so its revenue and
+    COGS are recognized in Reports/Owner Dashboard immediately, even
+    though "المتبقي" on the transaction will show the unpaid remainder
+    from here on - that remainder is a real, visible customer debt now,
+    not something this function tracks separately.
 
     Shipping-cost source is fixed at order creation (§1 of the latest
     spec) - there is deliberately no manual drawer↔online toggle here
@@ -330,17 +350,28 @@ def confirm_payment(order_id, payment_method, transfer_image_path=None):
     if payment_method not in dict(sales_service.PAYMENT_METHODS):
         raise OrderError("طريقة الدفع غير صحيحة.")
 
+    order_amount = _money(order["order_amount"])
+    if payment_amount is None:
+        amount = order_amount
+    else:
+        amount = _money(payment_amount)
+        if amount <= 0:
+            raise OrderError("قيمة الدفع يجب أن تكون أكبر من صفر.")
+        if amount > order_amount + 0.009:
+            raise OrderError("لا يمكن أن يتجاوز المبلغ المدفوع إجمالي الاوردر.")
+
     now = datetime.utcnow().isoformat(timespec="seconds")
     with db_cursor(commit=True) as cur:
         cur.execute(
             "INSERT INTO sale_payments (transaction_id, method, amount, created_at) VALUES (?, ?, ?, ?)",
-            (order["transaction_id"], payment_method, order["order_amount"], now),
+            (order["transaction_id"], payment_method, amount, now),
         )
         cur.execute(
             """UPDATE orders SET payment_method = ?, money_transferred = 1, transfer_image_path = ?,
                                   financially_completed_at = ?, updated_at = ? WHERE id = ?""",
             (payment_method, transfer_image_path, now, now, order_id),
         )
+    return amount < order_amount - 0.009  # True if this was a shortfall confirmation
 
 
 # ---------- Quick View: order age (§9) ----------

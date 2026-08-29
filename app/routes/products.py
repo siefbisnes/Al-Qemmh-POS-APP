@@ -8,6 +8,33 @@ from app.services import compatibility as compatibility_service
 bp = Blueprint("products", __name__, url_prefix="/products")
 
 
+@bp.route("/audit-log")
+def audit_log():
+    """Product change/audit history (spec: admin-only, both the button
+    and the route itself - session["role"] is checked server-side here
+    regardless of what the UI shows, so manually typing this URL as a
+    non-admin still gets refused)."""
+    if session.get("role") != "admin":
+        abort(403)
+    from app.services import product_audit
+
+    event_type = request.args.get("event_type") or None
+    date_from = request.args.get("from") or None
+    date_to = request.args.get("to") or None
+    page = request.args.get("page", type=int) or 1
+
+    result = product_audit.list_events(
+        event_type=event_type, date_from=date_from, date_to=date_to,
+        page=page, page_size=50,
+    )
+    return render_template(
+        "product_audit_log.html",
+        events=result["events"], has_more=result["has_more"], page=page,
+        event_labels=product_audit.EVENT_LABELS_AR,
+        event_type=event_type or "", date_from=date_from or "", date_to=date_to or "",
+    )
+
+
 @bp.route("/<int:product_id>")
 def detail(product_id):
     product = product_service.get_product(product_id)
@@ -67,14 +94,26 @@ def edit(product_id):
 
         purchase_price = product["purchase_price"]
         submitted_purchase_price = request.form.get("purchase_price", type=float)
-        if session.get("role") == "admin":
-            purchase_price = submitted_purchase_price or 0
-        elif submitted_purchase_price is not None:
+        if submitted_purchase_price is not None:
             purchase_price = submitted_purchase_price
+        # (admin vs non-admin only ever differed in whether a MISSING
+        # field falls back to 0 or to the existing price - that "or 0"
+        # for admins was the bug: a blank/unparseable purchase_price on
+        # any admin edit silently zeroed out a real, previously-saved
+        # price instead of leaving it untouched. Both roles now keep
+        # the existing value whenever nothing valid was actually
+        # submitted, and only ever change it when the admin explicitly
+        # submits a new one - non-admins were never allowed to submit
+        # this field in the first place, so this doesn't loosen anything
+        # for them.)
 
         updated_name = request.form.get("name", "").strip()
         updated_quantity = request.form.get("quantity", type=int) or 0
-        updated_price = request.form.get("selling_price", type=float) or 0
+        submitted_selling_price = request.form.get("selling_price", type=float)
+        # Same bug, same fix, for selling_price: a missing/unparseable
+        # field previously fell back to 0 and silently overwrote a real
+        # saved price - now it's left untouched instead.
+        updated_price = submitted_selling_price if submitted_selling_price is not None else float(product.get("selling_price") or 0)
         product_service.update_product(
             product_id=product_id,
             category_id=category_id,

@@ -14,6 +14,7 @@ When the owner marks units as هالك on a product page:
 from datetime import datetime
 
 from app.db import db_cursor
+from app.services import product_audit
 
 # --- Deferred spoilage expense (12-month spread) -------------------------
 # CUSTOM CLIENT-REQUESTED OVERRIDE of standard accounting: a write-off's
@@ -128,6 +129,14 @@ def create_writeoff(product_id, quantity, note=None, writeoff_date=None):
             "UPDATE products SET quantity = quantity - ? WHERE id = ?",
             (quantity, product_id),
         )
+        product_audit.log_event(
+            product_id, row["name"], "quantity_damaged",
+            quantity_before=row["quantity"], quantity_after=row["quantity"] - quantity,
+            new_value=str(quantity), reference=str(writeoff_id),
+            note=note or f"خسارة تكلفة {cost_loss:.2f} ج.م · قيمة بيع ضائعة {revenue_loss:.2f} ج.م",
+            cur=cur,
+        )
+        product_audit.record_expected_returns_snapshot(cur=cur)
 
     return {
         "id": writeoff_id,
@@ -158,6 +167,18 @@ def delete_writeoff(writeoff_id):
             (row["quantity"], row["product_id"]),
         )
         cur.execute("DELETE FROM stock_writeoffs WHERE id = ?", (writeoff_id,))
+        product_row = cur.execute(
+            "SELECT name, quantity FROM products WHERE id = ?", (row["product_id"],)
+        ).fetchone()
+        if product_row:
+            product_audit.log_event(
+                row["product_id"], product_row["name"], "quantity_manual",
+                quantity_before=product_row["quantity"] - row["quantity"],
+                quantity_after=product_row["quantity"],
+                new_value=str(row["quantity"]), reference=str(writeoff_id),
+                note="إلغاء سجل هالك — إرجاع الكمية للمخزون", cur=cur,
+            )
+            product_audit.record_expected_returns_snapshot(cur=cur)
 
 
 def list_for_product(product_id):

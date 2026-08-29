@@ -206,48 +206,65 @@ def profit_revenue_series(date_from, date_to, bucket):
     }
 
 
+def _expected_returns_by_bucket(date_from, date_to, bucket, bucket_keys):
+    """Maps each bucket key -> the most recent recorded Expected Returns
+    snapshot dated on/before that bucket, carried forward across
+    buckets that had no inventory-affecting change (a stock/level
+    metric, not a per-period sum - see
+    app/services/product_audit.py:expected_returns_history()). Only
+    ever carries forward REAL recorded values: a bucket before the very
+    first snapshot on file gets None (Chart.js draws no bar there)
+    rather than a fabricated figure - this feature has no history
+    before its own rollout by design (see delivery notes 8.1/8.2)."""
+    from app.services import product_audit
+    history = product_audit.expected_returns_history(date_from, date_to)
+
+    result = {}
+    idx = 0
+    last_value = None
+    have_any = False
+    for key in bucket_keys:
+        while idx < len(history) and _bucket_key(history[idx]["date"], bucket) <= key:
+            last_value = history[idx]["value"]
+            have_any = True
+            idx += 1
+        result[key] = last_value if have_any else None
+    return result
+
+
 def purchases_vs_expected(date_from, date_to, bucket):
     """Cost/value of current inventory, over the selected period:
-      - Expected Returns: a SINGLE flat figure - total anticipated
-        sell-through value (selling_price × qty) of EVERY currently
-        active product, right now - repeated identically across every
-        bucket. Intentionally NOT time-windowed and NOT affected by
-        which timeframe tab is selected: it always answers "what is the
-        whole inventory worth if sold today", a snapshot of current
-        reality rather than a trend.
-      - المشتريات المسجلة من المخزون: cash recorded in the purchases
-        table per bucket, for the selected period.
+      - Expected Returns: the persisted daily snapshot of
+        Σ(quantity × selling_price) over every currently-sellable
+        product (see app/services/product_audit.py), carried forward
+        per bucket so it reflects an actual historical trend instead of
+        repeating today's figure across the whole chart. History only
+        exists from the day this feature was introduced onward.
+      - المباع (unchanged calculation/behavior - only its displayed
+        label changed; was "المشتريات المسجلة من المخزون"): cash
+        recorded in the purchases table per bucket, for the selected
+        period.
     """
     buckets = _empty_buckets(date_from, date_to, bucket)
     recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", date_from, date_to, bucket)
 
-    with db_cursor() as cur:
-        rows = cur.execute(
-            """
-            SELECT quantity, selling_price
-            FROM products
-            WHERE COALESCE(is_active, 1) = 1
-              AND COALESCE(source, '') <> 'service_placeholder'
-            """,
-        ).fetchall()
-
-    # Expected Returns: one flat total across the ENTIRE active
-    # inventory, unrelated to any bucket or date range.
-    total_expected_now = sum((r["selling_price"] or 0) * (r["quantity"] or 0) for r in rows)
-
     bucket_keys = list(buckets.keys())
+    expected_by_bucket = _expected_returns_by_bucket(date_from, date_to, bucket, bucket_keys)
     labels = [_label_for_bucket(k, bucket) for k in buckets]
     return {
         "labels": labels,
         "datasets": [
             {
                 "label": "القيمة المتوقعة / Expected Returns",
-                "data": [round(total_expected_now, 2)] * len(bucket_keys),
+                "data": [
+                    round(expected_by_bucket[k], 2) if expected_by_bucket[k] is not None else None
+                    for k in bucket_keys
+                ],
                 "backgroundColor": "rgba(52, 211, 153, 0.75)",
                 "borderRadius": 6,
             },
             {
-                "label": "المشتريات المسجلة من المخزون / Recorded Purchases",
+                "label": "المباع",
                 "data": [round(recorded.get(k, 0.0), 2) for k in bucket_keys],
                 "backgroundColor": "rgba(96, 165, 250, 0.65)",
                 "borderRadius": 6,
@@ -349,10 +366,10 @@ def stagnant_and_damaged(date_from=None, date_to=None):
 
 def kpis(date_from, date_to):
     """KPI strip — Net Profit calculation with customer debt handling.
-    
+
     Accounting Fix: Now calculates REALIZED net profit (based on payments collected)
     rather than including unpaid customer debts.
-    
+
     Realized Net Profit = Collected Revenue - Realized COGS - Expenses - Writeoff cost
     Potential Net Profit = Total Revenue - Total COGS - Expenses - Writeoff cost
     """
@@ -367,7 +384,7 @@ def kpis(date_from, date_to):
     # Calculate realized revenue and COGS based on actual payments
     realized_revenue = 0.0
     realized_cogs = 0.0
-    
+
     realized_query = """
         SELECT
             t.id AS transaction_id,
@@ -381,13 +398,13 @@ def kpis(date_from, date_to):
         WHERE s.is_voided = 0 AND s.sale_date >= ? AND s.sale_date <= ?
         GROUP BY t.id
     """
-    
+
     with db_cursor() as cur:
         for row in cur.execute(realized_query, (date_from, date_to)).fetchall():
             total_sale = float(row["total_sale_amount"] or 0)
             paid = float(row["paid_amount"] or 0)
             total_cogs_for_tx = float(row["total_cogs"] or 0)
-            
+
             if total_sale > 0:
                 # Only count the COGS proportion for what was actually paid
                 paid_ratio = min(paid / total_sale, 1.0)  # Cap at 1.0 for overpayments
@@ -427,13 +444,13 @@ def kpis(date_from, date_to):
 
     # Realized net profit: from money that has actually been collected
     realized_net_profit = realized_revenue - realized_cogs - expenses - writeoff_cost
-    
+
     # Potential net profit: from all sales including unpaid debt
     potential_net_profit = total_revenue - total_cogs - expenses - writeoff_cost
-    
+
     # Outstanding debt
     outstanding_debt = total_revenue - realized_revenue
-    
+
     stock = stagnant_and_damaged(date_from=date_from, date_to=date_to)
 
     return {

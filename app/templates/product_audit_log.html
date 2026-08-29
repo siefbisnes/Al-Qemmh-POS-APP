@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}سجل تغييرات المنتجات — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header" dir="rtl">
+  <h1>سجل تغييرات المنتجات</h1>
+</div>
+
+<form class="toolbar" method="get" dir="rtl">
+  <div class="field" style="margin:0;">
+    <label>نوع الحدث</label>
+    <select name="event_type">
+      <option value="" {{ 'selected' if not event_type }}>الكل</option>
+      {% for key, label in event_labels.items() %}
+      <option value="{{ key }}" {{ 'selected' if event_type == key }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field" style="margin:0;"><label>من</label><input type="date" name="from" value="{{ date_from }}"></div>
+  <div class="field" style="margin:0;"><label>إلى</label><input type="date" name="to" value="{{ date_to }}"></div>
+  <button type="submit" class="btn" style="align-self:flex-end;">تصفية</button>
+  {% if event_type or date_from or date_to %}
+  <a href="{{ url_for('products.audit_log') }}" class="btn btn-sm" style="align-self:flex-end;">مسح التصفية</a>
+  {% endif %}
+</form>
+
+{% if events %}
+<div dir="rtl">
+  {% for e in events %}
+  <div class="panel" style="margin-bottom:0.85rem; padding:1rem 1.25rem;">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.6rem;">
+      <div style="display:flex; align-items:center; gap:0.6rem;">
+        {% if e.event_type == 'created' %}
+          <span class="badge badge-grade-a">{{ event_labels.get(e.event_type, e.event_type) }}</span>
+        {% elif e.event_type == 'removed' %}
+          <span class="badge badge-grade-c">{{ event_labels.get(e.event_type, e.event_type) }}</span>
+        {% elif e.event_type == 'quantity_sale' %}
+          <span class="badge badge-grade-a">{{ event_labels.get(e.event_type, e.event_type) }}</span>
+        {% elif e.event_type == 'quantity_damaged' %}
+          <span class="badge badge-grade-c">{{ event_labels.get(e.event_type, e.event_type) }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ event_labels.get(e.event_type, e.event_type) }}</span>
+        {% endif %}
+        <strong>
+          {% if e.reference_type == 'transaction' and e.reference %}
+            <a href="{{ url_for('sales.transaction_detail', transaction_id=e.reference) }}">{{ e.product_name }}</a>
+          {% elif e.product_id %}
+            <a href="{{ url_for('products.detail', product_id=e.product_id) }}">{{ e.product_name }}</a>
+          {% else %}
+            {{ e.product_name }}
+          {% endif %}
+        </strong>
+        {% if not e.product_id %}<span class="subtitle">(محذوف)</span>{% endif %}
+      </div>
+      <span class="subtitle">{{ e.created_at[:16] }}{% if e.username %} — بواسطة: {{ e.username }}{% endif %}</span>
+    </div>
+
+    {# ---- quantity-shaped events: sale / manual / damaged ---- #}
+    {% if e.event_type in ('quantity_sale', 'quantity_manual', 'quantity_damaged') %}
+      <p style="margin:0.2rem 0;">
+        الكمية قبل العملية: <strong>{{ e.quantity_before if e.quantity_before is not none else '—' }}</strong>
+        {% if e.event_type == 'quantity_sale' %}
+          · الكمية المباعة: <strong>{{ e.new_value }}</strong>
+        {% elif e.event_type == 'quantity_damaged' %}
+          · الكمية الهالكة: <strong>{{ e.new_value }}</strong>
+        {% else %}
+          · التغيير: <strong>{{ '%+d'|format(e.new_value|int) if e.new_value else '—' }}</strong>
+        {% endif %}
+        · الكمية بعد العملية: <strong>{{ e.quantity_after if e.quantity_after is not none else '—' }}</strong>
+      </p>
+      {% if e.reference_type == 'transaction' and e.reference %}
+        <p style="margin:0.2rem 0;">
+          <a href="{{ url_for('sales.transaction_detail', transaction_id=e.reference) }}">عرض الفاتورة</a>
+        </p>
+      {% elif e.reference %}
+        <p class="subtitle" style="margin:0.2rem 0;">المرجع: #{{ e.reference }}</p>
+      {% endif %}
+      {% if e.event_type == 'quantity_sale' and e.note %}
+        <p style="margin:0.2rem 0;"><strong>{{ e.note }}</strong></p>
+      {% elif e.note %}
+        <p class="subtitle" style="margin:0.2rem 0;">{{ e.note }}</p>
+      {% endif %}
+
+    {# ---- price-shaped events ---- #}
+    {% elif e.event_type in ('price_selling', 'price_purchase') %}
+      <p style="margin:0.2rem 0;">
+        {{ 'السعر القديم' if e.event_type == 'price_selling' else 'سعر الشراء القديم' }}:
+        <strong>{{ '%.2f'|format(e.old_value|float) if e.old_value else '—' }} ج.م</strong>
+        ←
+        {{ 'السعر الجديد' if e.event_type == 'price_selling' else 'سعر الشراء الجديد' }}:
+        <strong>{{ '%.2f'|format(e.new_value|float) if e.new_value else '—' }} ج.م</strong>
+        {% if e.old_value and e.new_value %}
+          · التغيير: <strong>{{ '%+.2f'|format(e.new_value|float - e.old_value|float) }} ج.م</strong>
+        {% endif %}
+      </p>
+
+    {# ---- name change ---- #}
+    {% elif e.event_type == 'name_changed' %}
+      <p style="margin:0.2rem 0;">
+        الاسم القديم: <strong>{{ e.old_value or '—' }}</strong> ← الاسم الجديد: <strong>{{ e.new_value or '—' }}</strong>
+      </p>
+
+    {# ---- specs/details change ---- #}
+    {% elif e.event_type == 'specs_changed' %}
+      {% if e.old_value or e.new_value %}
+      <p style="margin:0.2rem 0;">تعديل التفاصيل — القديم: <strong>{{ e.old_value or '—' }}</strong> ← الجديد: <strong>{{ e.new_value or '—' }}</strong></p>
+      {% endif %}
+      {% if e.note %}<p class="subtitle" style="margin:0.2rem 0;">{{ e.note }}</p>{% endif %}
+
+    {# ---- created / removed ---- #}
+    {% else %}
+      {% if e.old_value %}<p class="subtitle" style="margin:0.2rem 0;">{{ e.old_value }}</p>{% endif %}
+      {% if e.new_value %}<p class="subtitle" style="margin:0.2rem 0;">{{ e.new_value }}</p>{% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div style="display:flex; justify-content:center; gap:0.5rem; margin-top:1rem;">
+  {% if page > 1 %}
+  <a class="btn btn-sm" href="{{ url_for('products.audit_log', **dict(request.args, page=page-1)) }}">السابق</a>
+  {% endif %}
+  {% if has_more %}
+  <a class="btn btn-sm" href="{{ url_for('products.audit_log', **dict(request.args, page=page+1)) }}">التالي</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="empty-state" dir="rtl"><h3>لا توجد سجلات مطابقة.</h3></div>
+{% endif %}
+
+{% endblock %}

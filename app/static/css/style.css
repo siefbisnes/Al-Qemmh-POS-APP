@@ -685,6 +685,15 @@ table.data-table tr:last-child td { border-bottom: none; }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
 @media (max-width: 720px) { .form-grid { grid-template-columns: 1fr; } }
+
+/* Payment method row (sales_new.html): method + amount stay flexible,
+   but the حذف button gets its own auto-width column instead of
+   inheriting a full 1fr grid cell from .form-grid - that's what was
+   stretching it far wider than إضافة طريقة دفع أخرى. */
+.payment-row.form-grid { grid-template-columns: 1fr 1fr auto; align-items: end; }
+.payment-row .remove-payment { width: auto; white-space: nowrap; }
+@media (max-width: 720px) { .payment-row.form-grid { grid-template-columns: 1fr; } }
+
 .field { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .9rem; }
 .field label { font-size: .82rem; font-weight: 600; color: var(--text-muted); }
 .field .hint { font-size: .76rem; color: var(--text-muted); }
