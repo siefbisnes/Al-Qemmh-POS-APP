@@ -19,6 +19,17 @@ if not exist "%SCRIPT_DIR%vendor\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" (
     goto :error
 )
 
+if not exist "%SCRIPT_DIR%vendor\tailscale-setup-latest-amd64.exe" (
+    echo.
+    echo ERROR: vendor\tailscale-setup-latest-amd64.exe is missing.
+    echo Download the current Windows installer from:
+    echo   https://tailscale.com/download/windows
+    echo rename it to tailscale-setup-latest-amd64.exe and save it at that
+    echo path before building - see BUILD_EXE.md.
+    echo.
+    goto :error
+)
+
 if exist "%OUTPUT_DIR%" rmdir /s /q "%OUTPUT_DIR%"
 mkdir "%OUTPUT_DIR%"
 

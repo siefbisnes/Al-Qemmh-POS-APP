@@ -41,8 +41,12 @@ PAYMENT_METHODS = [
     ("cash", "نقدي (Cash)"),
     ("vodafone_cash", "Vodafone Cash"),
     ("instapay", "Instapay"),
+    ("instabarid", "انستا بريد"),
 ]
-PAYMENT_LABELS_AR = {"cash": "نقدي", "vodafone_cash": "Vodafone Cash", "instapay": "Instapay"}
+PAYMENT_LABELS_AR = {
+    "cash": "نقدي", "vodafone_cash": "Vodafone Cash", "instapay": "Instapay",
+    "instabarid": "انستا بريد",
+}
 
 # Excludes 0/O and 1/I/L - characters that look alike when read off a
 # printed receipt or typed into search. 6 characters from this 31-symbol

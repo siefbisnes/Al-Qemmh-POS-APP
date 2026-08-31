@@ -61,7 +61,11 @@ def payment_totals(date_from=None, date_to=None):
 
     by_method = {row["method"]: _money(row["total"]) for row in rows}
     cash = by_method.get("cash", 0) or 0
-    online = (by_method.get("vodafone_cash", 0) or 0) + (by_method.get("instapay", 0) or 0)
+    online = (
+        (by_method.get("vodafone_cash", 0) or 0)
+        + (by_method.get("instapay", 0) or 0)
+        + (by_method.get("instabarid", 0) or 0)
+    )
     return {
         "cash": cash,
         "online": online,

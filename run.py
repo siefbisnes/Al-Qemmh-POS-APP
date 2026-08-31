@@ -92,6 +92,32 @@ TAILSCALE_CMD_TIMEOUT = 3       # seconds, for ip/status lookups
 TAILSCALE_SERVE_TIMEOUT = 6     # seconds, for the serve command itself
 TAILSCALE_INSTALL_TIMEOUT = 300  # seconds - installers can be slow (download + install)
 
+# Standalone Windows Tailscale installer, bundled into the exe via
+# alqemma.spec's datas entry - same pattern as
+# WEBVIEW2_OFFLINE_INSTALLER_PATH further down this file. Shop PCs run
+# with no/restricted internet, so the previous winget-based install
+# (_tailscale_install_command) reliably fails on a brand-new machine
+# that has no internet yet, or whose winget/App Installer isn't fully
+# set up (both are realistic on a freshly-imaged Windows box, even
+# though winget ships with modern Windows). This local file needs no
+# network and no winget at all. Download the current
+# "tailscale-setup-<version>-amd64.exe" from
+# https://tailscale.com/download/windows and place it here before
+# building - see BUILD_EXE.md. build_exe.bat checks for it.
+TAILSCALE_OFFLINE_INSTALLER_PATH = os.path.join(BUNDLE_DIR, "vendor", "tailscale-setup-latest-amd64.exe")
+
+# Passes of "scan for a device still using our hostname and delete it"
+# to keep running even AFTER the hostname has already been
+# successfully claimed - a second, independent layer of protection on
+# top of TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS's detect->clean->claim loop
+# (which only retries WHILE trying to claim). This catches a duplicate
+# that reappears in the brief window right after success - e.g. a
+# stale device the Tailnet API hadn't finished reporting yet, or
+# another one of this same machine's old orphaned registrations
+# surfacing slightly late. See the extra step at the end of
+# perform_tailscale_repair().
+TAILSCALE_POST_SUCCESS_SWEEP_PASSES = 3
+
 # The Tailscale device hostname this machine should always use, regardless
 # of the Windows computer name or whatever name a previous `tailscale up`
 # picked - see perform_tailscale_repair() and AppAPI.troubleshoot_tailscale().
@@ -1159,17 +1185,48 @@ def perform_tailscale_repair(hostname, log):
         log("      [OK] Tailscale is installed.")
     else:
         log("      [!] Tailscale is not installed - installing now (this can take a few minutes)...")
-        install_cmd = _tailscale_install_command()
-        ok, output = _run_shell_command(install_cmd, timeout=TAILSCALE_INSTALL_TIMEOUT)
-        _refresh_path_from_registry()
-        if not is_tailscale_installed():
-            log(f"      [FAILED] Could not install Tailscale: {output}")
-            log("")
-            log("Please install Tailscale manually from https://tailscale.com/download and try again.")
-            return {"ok": False, "message": "Tailscale installation failed.", "conflict": None}
-        if not ok:
-            log(f"      [WARN] Installer exited non-zero but Tailscale is present - continuing. (installer output: {output.splitlines()[-1] if output else 'n/a'})")
-        log("      [OK] Tailscale installed successfully.")
+
+        # On a brand-new Windows machine this is often the very first
+        # thing that needs internet access - which a freshly-imaged shop
+        # PC frequently doesn't have yet. Try the bundled offline
+        # installer first (no network, no winget required at all); only
+        # fall back to the winget/curl one-liner when it's not present
+        # (dev machine, or the vendor file wasn't added before building
+        # - see BUILD_EXE.md) or it doesn't leave `tailscale` on PATH.
+        installed_via_bundle = False
+        if sys.platform == "win32" and os.path.isfile(TAILSCALE_OFFLINE_INSTALLER_PATH):
+            log(f"      Found bundled installer - running it silently...")
+            try:
+                # /quiet is Tailscale's documented silent-install switch
+                # for their Windows .exe installer as of this writing -
+                # worth double-checking against
+                # https://tailscale.com/kb/1080/cli before relying on it
+                # if you're bundling a much newer/older installer build,
+                # since installer command-line behavior can change
+                # between releases.
+                subprocess.run(
+                    [TAILSCALE_OFFLINE_INSTALLER_PATH, "/quiet"],
+                    capture_output=True, timeout=TAILSCALE_INSTALL_TIMEOUT,
+                )
+            except Exception as exc:
+                log(f"      [WARN] Bundled installer did not complete cleanly: {exc}")
+            _refresh_path_from_registry()
+            installed_via_bundle = is_tailscale_installed()
+            if installed_via_bundle:
+                log("      [OK] Tailscale installed successfully from the bundled installer.")
+
+        if not installed_via_bundle:
+            install_cmd = _tailscale_install_command()
+            ok, output = _run_shell_command(install_cmd, timeout=TAILSCALE_INSTALL_TIMEOUT)
+            _refresh_path_from_registry()
+            if not is_tailscale_installed():
+                log(f"      [FAILED] Could not install Tailscale: {output}")
+                log("")
+                log("Please install Tailscale manually from https://tailscale.com/download and try again.")
+                return {"ok": False, "message": "Tailscale installation failed.", "conflict": None}
+            if not ok:
+                log(f"      [WARN] Installer exited non-zero but Tailscale is present - continuing. (installer output: {output.splitlines()[-1] if output else 'n/a'})")
+            log("      [OK] Tailscale installed successfully.")
     log("")
 
     # ---- [2/6] Service + [3/6] Login - both driven by `tailscale up`,
@@ -1266,6 +1323,30 @@ def perform_tailscale_repair(hostname, log):
             log(f"      Waiting for the name to fully release, then trying again ({attempt}/{TAILSCALE_HOSTNAME_CLAIM_ATTEMPTS})...")
             time.sleep(TAILSCALE_POST_DELETE_SETTLE)
         log("")
+
+    # ---- Extra safety sweep (a SECOND, independent layer of protection
+    # on top of the claim loop above) ----
+    # Only runs once the hostname has actually been claimed
+    # successfully. Re-scans the Tailnet a few more times for any OTHER
+    # device that has since claimed/re-claimed our hostname, deleting
+    # it the exact same way as the main loop above - this catches a
+    # duplicate that surfaces slightly late (API eventual consistency,
+    # or another one of this same machine's old orphaned registrations
+    # showing up after the fact) instead of only ever being caught the
+    # next time someone happens to manually rerun this repair.
+    if conflict is None and current_hostname.lower() == hostname.lower():
+        for sweep_pass in range(1, TAILSCALE_POST_SUCCESS_SWEEP_PASSES + 1):
+            log(f"[extra check {sweep_pass}/{TAILSCALE_POST_SUCCESS_SWEEP_PASSES}] Re-scanning for a duplicate device after success...")
+            sweep_conflict = _detect_and_clean_hostname_conflict(hostname, self_id, log)
+            log("")
+            if sweep_conflict is not None:
+                # Something re-claimed the name after we set it -
+                # surface this as a real conflict for [6/6] below to
+                # report, exactly as the main loop would have.
+                conflict = sweep_conflict
+                break
+            if sweep_pass < TAILSCALE_POST_SUCCESS_SWEEP_PASSES:
+                time.sleep(TAILSCALE_POST_DELETE_SETTLE)
 
     # ---- [6/6] Final verification ----
     log("[6/6] Final verification...")

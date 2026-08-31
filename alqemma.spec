@@ -32,6 +32,18 @@ a = Analysis(
         # launch. Must be downloaded once and placed here before
         # building - see BUILD_EXE.md. build_exe.bat checks for it.
         ('vendor/MicrosoftEdgeWebView2RuntimeInstallerX64.exe', 'vendor'),
+
+        # Offline Tailscale Windows installer - same reasoning as
+        # WebView2 above: a brand-new/freshly-imaged Windows machine may
+        # have no internet yet and/or an unready winget, both of which
+        # the old winget-based install in perform_tailscale_repair()
+        # depends on. run.py's TAILSCALE_OFFLINE_INSTALLER_PATH tries
+        # this local file first. Download the current
+        # "tailscale-setup-<version>-amd64.exe" from
+        # https://tailscale.com/download/windows, rename it to
+        # tailscale-setup-latest-amd64.exe, and place it here before
+        # building - see BUILD_EXE.md. build_exe.bat checks for it.
+        ('vendor/tailscale-setup-latest-amd64.exe', 'vendor'),
     ],
 
     hiddenimports=[

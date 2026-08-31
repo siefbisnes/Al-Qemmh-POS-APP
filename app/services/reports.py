@@ -304,23 +304,41 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
     from app.services import purchases as purchase_service
     from app.services import adjustments as adjustment_service
     from app.services import writeoffs as writeoff_service
+    from app.services import orders as order_service
     from app.services.sales import receipt_number
     from flask import url_for
 
     entries = []
 
-    sales_query = """SELECT s.id AS id, s.sale_date AS date, s.transaction_id, s.quantity,
+    # A delivery order's sale row is created immediately (inventory is
+    # reserved right away - see create_transaction), often 1-2 days
+    # before the order actually reaches وصل and its payment is
+    # confirmed. Two things follow from that, matching how this same
+    # order is already treated everywhere else in the app (Net Profit,
+    # Reports range summary):
+    #   1. It must not appear in this ledger at all while still pending
+    #      - no money has actually moved yet, so it isn't a real "pound
+    #      in" until confirmed (see order_service.pending_order_sql_exclusion).
+    #   2. Once confirmed, it should be DATED at that confirmation
+    #      moment (orders.financially_completed_at) - when the money was
+    #      actually received - not at the order's original creation
+    #      date. An ordinary walk-in sale has no order row at all, so
+    #      COALESCE just falls through to its own sale_date, unaffected.
+    date_expr = "COALESCE(o.financially_completed_at, s.sale_date)"
+    sales_query = f"""SELECT s.id AS id, {date_expr} AS date, s.transaction_id, s.quantity,
                              s.selling_price, t.receipt_number AS stored_receipt_number,
                              COALESCE(NULLIF(TRIM(s.custom_product_name), ''), s.service_description, p.name) AS product_name
                       FROM sales s JOIN products p ON p.id = s.product_id
                       LEFT JOIN transactions t ON t.id = s.transaction_id
-                      WHERE s.is_voided = 0"""
+                      LEFT JOIN orders o ON o.transaction_id = s.transaction_id
+                      WHERE s.is_voided = 0
+                        AND {order_service.pending_order_sql_exclusion("s")}"""
     sales_params = []
     if date_from:
-        sales_query += " AND s.sale_date >= ?"
+        sales_query += f" AND {date_expr} >= ?"
         sales_params.append(date_from)
     if date_to:
-        sales_query += " AND s.sale_date <= ?"
+        sales_query += f" AND {date_expr} <= ?"
         sales_params.append(date_to)
     with db_cursor() as cur:
         for r in cur.execute(sales_query, sales_params).fetchall():
