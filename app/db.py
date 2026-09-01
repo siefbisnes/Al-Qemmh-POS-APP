@@ -120,7 +120,7 @@ def init_db(app):
 
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
-    with open(schema_path) as f:
+    with open(schema_path, encoding="utf-8") as f:
         schema_sql = f.read()
 
     if needs_schema_init:
