@@ -1,0 +1,639 @@
+{% extends "base.html" %}
+{% block title %}تشخيص الأجهزة — القمة{% endblock %}
+{% block content %}
+
+<div class="page-header" dir="rtl">
+  <h1>تشخيص الأجهزة</h1>
+</div>
+
+<div class="diag-tabs" id="diagTabs" dir="rtl">
+  <button type="button" class="diag-tab is-active" data-target="diagKeyboard">⌨️ لوحة المفاتيح</button>
+  <button type="button" class="diag-tab" data-target="diagMouse">🖱️ الفأرة</button>
+  <button type="button" class="diag-tab" data-target="diagDisplay">🖥️ الشاشة</button>
+</div>
+
+<!-- ============ MODULE 1: Keyboard ============ -->
+<section id="diagKeyboard" class="diag-panel" dir="rtl">
+  <div class="panel">
+    <div class="diag-panel-head">
+      <h2>⌨️ لوحة المفاتيح</h2>
+      <button type="button" class="btn btn-sm" data-reset="keyboard">إعادة تعيين</button>
+    </div>
+
+    <div class="diag-stat-row">
+      <div class="stat-card"><div class="label">KPS (مفاتيح/ثانية)</div><div class="value" id="kKps">0</div></div>
+      <div class="stat-card"><div class="label">آخر مفتاح</div><div class="value" id="kLastKey" style="font-size:1rem;">—</div></div>
+    </div>
+    <p class="subtitle" id="kStuckWarning" style="display:none; color:var(--danger); font-weight:600;">⚠️ مفتاح عالق - لم يتم تسجيل تحريره لفترة طويلة.</p>
+    <p class="subtitle">اضغط أي مفتاح فعلي على لوحة المفاتيح - سيبقى المفتاح المقابل مميزًا بالأخضر بشكل دائم لتأكيد أنه تم رصده، حتى لو رفعت إصبعك. اضغط "إعادة تعيين" لمسح كل المفاتيح المُختبرة والبدء من جديد.</p>
+
+    <div class="diag-keyboard" id="virtualKeyboard" dir="ltr">
+      <div class="diag-kb-main" id="kbMain"></div>
+      <div class="diag-kb-nav" id="kbNav"></div>
+      <div class="diag-kb-numpad" id="kbNumpad"></div>
+    </div>
+
+    <h3 style="margin-top:1rem;">تفاصيل آخر حدث</h3>
+    <table class="data-table">
+      <tr><th>e.key</th><th>e.code</th><th>e.keyCode</th></tr>
+      <tr><td id="kEventKey">—</td><td id="kEventCode">—</td><td id="kEventKeyCode">—</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ============ MODULE 2: Mouse ============ -->
+<section id="diagMouse" class="diag-panel" dir="rtl" hidden>
+  <div class="panel">
+    <div class="diag-panel-head">
+      <h2>🖱️ الفأرة</h2>
+      <button type="button" class="btn btn-sm" data-reset="mouse">إعادة تعيين</button>
+    </div>
+
+    <p class="subtitle">انقر بأي زر في أي مكان داخل المربع بالأسفل - المنطقة كلها تستقبل النقر، وليست مجرد زر صغير.</p>
+
+    <div class="diag-mouse-testzone" id="mouseTestZone" tabindex="0">
+      <div class="diag-mouse-testzone-hint">انقر هنا يسار / يمين / وسط، ومرّر العجلة</div>
+    </div>
+
+    <div class="diag-mouse-buttons" dir="ltr" style="margin-top:1rem;">
+      <div class="diag-mouse-btn" id="mBtnLeft"><span>يسار</span></div>
+      <div class="diag-mouse-btn" id="mBtnMiddle"><span>وسط</span></div>
+      <div class="diag-mouse-btn" id="mBtnRight"><span>يمين</span></div>
+    </div>
+    <p class="subtitle" id="mStuckWarning" style="display:none; color:var(--danger); font-weight:600;">⚠️ زر عالق - تم الضغط عليه لفترة طويلة بدون تحرير.</p>
+
+    <h3 style="margin-top:1rem;">عجلة التمرير</h3>
+    <div class="diag-scroll-visualizer">
+      <div class="diag-scroll-bar-up" id="scrollUpBar"></div>
+      <div class="diag-scroll-center">↕</div>
+      <div class="diag-scroll-bar-down" id="scrollDownBar"></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ MODULE 3: Display ============ -->
+<section id="diagDisplay" class="diag-panel" dir="rtl" hidden>
+  <div class="panel">
+    <div class="diag-panel-head">
+      <h2>🖥️ اختبار الشاشة</h2>
+      <button type="button" class="btn btn-sm" data-reset="display">إعادة تعيين</button>
+    </div>
+    <p class="subtitle">اختبار البكسلات الميتة: يعرض ألوان صلبة بملء الشاشة بالتتابع (أحمر، أخضر، أزرق، أبيض، أسود) - اضغط مسافة (Space) للانتقال للون التالي، أو Esc للخروج.</p>
+    <button type="button" class="btn btn-primary" id="startDeadPixelTest">بدء اختبار البكسلات الميتة (ملء الشاشة)</button>
+
+    <h3 style="margin-top:1.25rem;">تدرجات الألوان (فحص جودة اللوحة)</h3>
+    <div class="diag-gradient-row">
+      <div class="diag-gradient" style="background:linear-gradient(90deg, #000, #f00);"></div>
+      <div class="diag-gradient" style="background:linear-gradient(90deg, #000, #0f0);"></div>
+      <div class="diag-gradient" style="background:linear-gradient(90deg, #000, #00f);"></div>
+      <div class="diag-gradient" style="background:linear-gradient(90deg, #000, #fff);"></div>
+    </div>
+
+    <h3 style="margin-top:1.25rem;">معلومات الشاشة</h3>
+    <p class="subtitle" id="monitorInfoNote">جاري القراءة...</p>
+    <div id="monitorInfoGrid" class="diag-usb-grid"></div>
+  </div>
+</section>
+
+<!-- Full-screen dead-pixel overlay -->
+<div id="deadPixelOverlay" class="diag-fullscreen-overlay" hidden>
+  <div class="diag-fullscreen-hint">مسافة للتالي · Esc للخروج — <span id="deadPixelLabel"></span></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .diag-tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1.25rem; }
+  .diag-tab {
+    appearance:none; border:1px solid var(--border); background:var(--surface); color:var(--text-muted);
+    padding:.55rem 1rem; border-radius:var(--radius-sm); font-size:.85rem; font-weight:600; cursor:pointer;
+  }
+  .diag-tab.is-active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .diag-panel-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:.75rem; }
+  .diag-panel-head h2 { margin:0; }
+  .diag-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width:900px) { .diag-grid-2 { grid-template-columns:1fr; } }
+
+  .diag-mouse-buttons { display:flex; gap:.6rem; flex-wrap:wrap; }
+  .diag-mouse-btn {
+    flex:1 1 90px; min-width:80px; padding:1rem .5rem; text-align:center; border-radius:var(--radius-sm);
+    border:2px solid var(--border); background:var(--bg); font-weight:600; font-size:.82rem; color:var(--text-muted);
+    transition:background .1s, border-color .1s, color .1s;
+  }
+  .diag-mouse-btn.is-active { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:var(--shadow-card); }
+  .diag-mouse-btn.was-clicked { border-color:var(--accent); color:var(--accent); }
+
+  /* The entire box is the hit-target (not a tiny button) - it just
+     needs to be focusable/clickable and cover the visible area; all
+     actual click/contextmenu/auxclick detection is wired directly on
+     this element in JS, so every pixel inside registers a click. */
+  .diag-mouse-testzone {
+    width:100%; min-height:220px; border:2px dashed var(--border); border-radius:var(--radius-sm);
+    background:var(--bg); display:flex; align-items:center; justify-content:center; text-align:center;
+    color:var(--text-muted); font-weight:600; cursor:crosshair; user-select:none; outline:none;
+    transition:border-color .1s, background .1s;
+  }
+  .diag-mouse-testzone:focus { border-color:var(--accent); }
+  .diag-mouse-testzone.flash-left { background:color-mix(in srgb, var(--accent) 25%, var(--bg)); }
+  .diag-mouse-testzone.flash-right { background:color-mix(in srgb, var(--warning) 25%, var(--bg)); }
+  .diag-mouse-testzone.flash-middle { background:color-mix(in srgb, var(--danger) 25%, var(--bg)); }
+
+  .diag-scroll-visualizer { display:flex; flex-direction:column; align-items:center; gap:.3rem; }
+  .diag-scroll-bar-up, .diag-scroll-bar-down {
+    width:60%; height:14px; border-radius:4px; background:var(--border); transition:background .15s, opacity .3s; opacity:.35;
+  }
+  .diag-scroll-bar-up.is-active { background:var(--accent); opacity:1; }
+  .diag-scroll-bar-down.is-active { background:var(--warning); opacity:1; }
+  .diag-scroll-center { font-size:1.2rem; color:var(--text-muted); }
+
+  .diag-stat-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:.75rem; margin-top:.75rem; }
+
+  /* Real ANSI US/UK layout, built with CSS Grid so every key sits in
+     its true physical row/column (including the nav cluster and full
+     numpad) rather than an approximate flex-wrap row. 1 grid column =
+     1 standard 1u keycap width; wider keys just span more columns. */
+  .diag-keyboard { display:flex; gap:1rem; margin-top:.75rem; user-select:none; overflow-x:auto; padding-bottom:.5rem; align-items:flex-start; }
+  .diag-kb-main { display:grid; grid-template-columns: repeat(15, 2rem); grid-auto-rows: 2rem; gap:.25rem; }
+  .diag-kb-nav { display:grid; grid-template-columns: repeat(3, 2rem); grid-auto-rows: 2rem; gap:.25rem; flex-shrink:0; }
+  .diag-kb-numpad { display:grid; grid-template-columns: repeat(4, 2rem); grid-auto-rows: 2rem; gap:.25rem; flex-shrink:0; }
+  .diag-key {
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--text-muted);
+    font-size:.68rem; line-height:1.1; padding:0 .2rem;
+    transition:background .06s, color .06s, border-color .06s;
+  }
+  .diag-key.is-empty { border:none; background:transparent; }
+  .diag-key.is-active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .diag-key.is-stuck { background:var(--danger); color:#fff; border-color:var(--danger); }
+  .diag-key .sub { display:block; font-size:.6rem; opacity:.75; }
+
+  .diag-gradient-row { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; }
+  .diag-gradient { height:60px; border-radius:var(--radius-sm); border:1px solid var(--border); }
+  @media (max-width:720px) { .diag-gradient-row { grid-template-columns:1fr 1fr; } }
+
+  .diag-progress { width:100%; height:10px; border-radius:5px; background:var(--border); overflow:hidden; }
+  .diag-progress-bar { height:100%; background:var(--accent); transition:width .15s; }
+
+  .diag-usb-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:.75rem; }
+  .diag-usb-card { padding:.85rem; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg); }
+  .diag-usb-card .name { font-weight:700; margin-bottom:.3rem; }
+  .diag-usb-card .meta { font-size:.78rem; color:var(--text-muted); }
+
+  .diag-log { max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius-sm); padding:.5rem; font-family:var(--font-mono); font-size:.78rem; background:var(--bg); }
+  .diag-log-entry { padding:.2rem 0; border-bottom:1px solid var(--border); }
+  .diag-log-entry:last-child { border-bottom:none; }
+
+  /* IMPORTANT: never set display:flex/grid etc. unconditionally on this
+     class again - it silently beats the [hidden] UA rule in the
+     cascade (same specificity, author rule applied after UA rules
+     always wins the tie), so the element stays visually present even
+     while `hidden` is set. Visibility for both overlays below is
+     controlled ONLY via JS toggling .is-open - never via the bare
+     class - so this class itself carries no display property at all. */
+  .diag-fullscreen-overlay {
+    position:fixed; inset:0; z-index:2000; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:2rem;
+    background:rgba(0,0,0,.0);
+  }
+  .diag-fullscreen-overlay.is-open { display:flex; }
+  .diag-fullscreen-hint { color:#fff; font-family:var(--font-body); font-size:.9rem; background:rgba(0,0,0,.45); padding:.5rem 1rem; border-radius:999px; }
+
+  .diag-mouse-full-topbar {
+    position:absolute; top:0; right:0; left:0; display:flex; justify-content:space-between; align-items:center;
+    padding:.75rem 1rem; background:rgba(0,0,0,.55); color:#fff; font-size:.85rem;
+  }
+  .diag-mouse-full-canvas { position:absolute; inset:0; width:100%; height:100%; background:var(--bg); cursor:crosshair; }
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Tab switching ----------
+  var tabs = document.querySelectorAll(".diag-tab");
+  var panels = document.querySelectorAll(".diag-panel");
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      tabs.forEach(function (t) { t.classList.remove("is-active"); });
+      panels.forEach(function (p) { p.hidden = true; });
+      tab.classList.add("is-active");
+      document.getElementById(tab.dataset.target).hidden = false;
+
+      // Suppress the physical Windows key only while the keyboard-test
+      // tab is actually open (native OS-level hook - see
+      // suppress_windows_key in run.py's AppAPI; JS alone can't stop
+      // the Start menu). Guarded so this is a no-op on older builds
+      // that don't have the bridge method yet, or in a plain browser.
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.suppress_windows_key) {
+        window.pywebview.api.suppress_windows_key(tab.dataset.target === "diagKeyboard").catch(function () {});
+      }
+
+      // Release any keys/buttons that were visually "held" the moment
+      // the user navigates away, so nothing looks stuck when they
+      // come back.
+      if (tab.dataset.target !== "diagKeyboard") {
+        Object.values(keyElements || {}).forEach(function (el) { el.classList.remove("is-active", "is-stuck"); });
+        keyHeldSince = {};
+      }
+    });
+  });
+
+  // Also release the hook if the user navigates away from the
+  // diagnostics page entirely (back button, closing the window, etc.)
+  // while the keyboard tab happened to be open.
+  window.addEventListener("beforeunload", function () {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.suppress_windows_key) {
+      window.pywebview.api.suppress_windows_key(false).catch(function () {});
+    }
+  });
+
+  // ============================================================
+  // MODULE 1a: Mouse
+  // ============================================================
+  // The whole test zone is the hit target: click/contextmenu/auxclick
+  // are bound directly on #mouseTestZone (not on document), so normal
+  // mouse interaction with the rest of the app/page is never touched,
+  // and every pixel inside the box reliably receives events - no tiny
+  // button to miss. contextmenu is prevented only while over this zone
+  // so a right-click here doesn't pop the OS/browser context menu
+  // instead of registering as a test click.
+  var mouseButtons = { 0: "mBtnLeft", 1: "mBtnMiddle", 2: "mBtnRight" };
+  var mouseFlashClass = { 0: "flash-left", 1: "flash-middle", 2: "flash-right" };
+  var mouseHeldSince = {};
+  var STUCK_THRESHOLD_MS = 4000;
+  var mouseZone = document.getElementById("mouseTestZone");
+
+  function updateMouseButtonUI(button, isDown) {
+    var id = mouseButtons[button];
+    if (!id) return;
+    var el = document.getElementById(id);
+    if (isDown) {
+      el.classList.add("is-active", "was-clicked");
+      mouseHeldSince[button] = Date.now();
+    } else {
+      el.classList.remove("is-active");
+      delete mouseHeldSince[button];
+      document.getElementById("mStuckWarning").style.display = "none";
+    }
+  }
+
+  function onMouseDown(e) { updateMouseButtonUI(e.button, true); }
+  function onMouseUp(e) { updateMouseButtonUI(e.button, false); }
+  function onWheel(e) {
+    var upBar = document.getElementById("scrollUpBar");
+    var downBar = document.getElementById("scrollDownBar");
+    if (e.deltaY < 0) {
+      upBar.classList.add("is-active");
+      setTimeout(function () { upBar.classList.remove("is-active"); }, 180);
+    } else if (e.deltaY > 0) {
+      downBar.classList.add("is-active");
+      setTimeout(function () { downBar.classList.remove("is-active"); }, 180);
+    }
+  }
+
+  // mousedown/mouseup drive the left/middle/right indicator cards and
+  // the "held too long" stuck check; "click"/"auxclick" drive the
+  // quick color flash so a technician gets instant feedback per click
+  // even without holding. All bound on the zone itself, not document,
+  // so clicking anywhere else on the page is completely unaffected.
+  mouseZone.addEventListener("mousedown", onMouseDown);
+  mouseZone.addEventListener("mouseup", onMouseUp);
+  mouseZone.addEventListener("wheel", onWheel, { passive: true });
+  mouseZone.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  mouseZone.addEventListener("click", function (e) { flashZone(0); });
+  mouseZone.addEventListener("auxclick", function (e) { flashZone(e.button); });
+
+  function flashZone(button) {
+    var cls = mouseFlashClass[button];
+    if (!cls) return;
+    mouseZone.classList.add(cls);
+    setTimeout(function () { mouseZone.classList.remove(cls); }, 150);
+  }
+
+  var mouseStuckInterval = setInterval(function () {
+    var now = Date.now();
+    var stuck = Object.values(mouseHeldSince).some(function (t) { return now - t > STUCK_THRESHOLD_MS; });
+    document.getElementById("mStuckWarning").style.display = stuck ? "" : "none";
+  }, 500);
+
+  function resetMouse() {
+    Object.values(mouseButtons).forEach(function (id) {
+      document.getElementById(id).classList.remove("is-active", "was-clicked");
+    });
+    mouseHeldSince = {};
+    document.getElementById("mStuckWarning").style.display = "none";
+    document.getElementById("scrollUpBar").classList.remove("is-active");
+    document.getElementById("scrollDownBar").classList.remove("is-active");
+  }
+
+  // ============================================================
+  // MODULE 1b: Keyboard
+  // ============================================================
+  // Layout is keyed DIRECTLY by real KeyboardEvent.code values (never
+  // a lossy "normalized" approximation) - this is what fixes "detected
+  // key doesn't match physical key": every code below (Backquote,
+  // Minus, Equal, BracketLeft, Semicolon, Quote, Comma, Period, Slash,
+  // etc.) is the exact string the browser actually reports for that
+  // physical key, punctuation included - not a guessed/generic one.
+  var U = 1; // one keycap unit, for readability below
+  function K(code, label, sub, span) { return { code: code, label: label, sub: sub || null, span: span || U }; }
+  var EMPTY = { empty: true, span: U };
+
+  var MAIN_ROWS = [
+    [K("Escape", "Esc"), K("F1", "F1"), K("F2", "F2"), K("F3", "F3"), K("F4", "F4"), K("F5", "F5"), K("F6", "F6"),
+     K("F7", "F7"), K("F8", "F8"), K("F9", "F9"), K("F10", "F10"), K("F11", "F11"), K("F12", "F12")],
+    [K("Backquote", "`", "~"), K("Digit1", "1", "!"), K("Digit2", "2", "@"), K("Digit3", "3", "#"), K("Digit4", "4", "$"),
+     K("Digit5", "5", "%"), K("Digit6", "6", "^"), K("Digit7", "7", "&"), K("Digit8", "8", "*"), K("Digit9", "9", "("),
+     K("Digit0", "0", ")"), K("Minus", "-", "_"), K("Equal", "=", "+"), K("Backspace", "⌫", null, 2)],
+    [K("Tab", "Tab", null, 2), K("KeyQ", "Q"), K("KeyW", "W"), K("KeyE", "E"), K("KeyR", "R"), K("KeyT", "T"), K("KeyY", "Y"),
+     K("KeyU", "U"), K("KeyI", "I"), K("KeyO", "O"), K("KeyP", "P"), K("BracketLeft", "[", "{"), K("BracketRight", "]", "}"),
+     K("Backslash", "\\", "|")],
+    [K("CapsLock", "Caps", null, 2), K("KeyA", "A"), K("KeyS", "S"), K("KeyD", "D"), K("KeyF", "F"), K("KeyG", "G"),
+     K("KeyH", "H"), K("KeyJ", "J"), K("KeyK", "K"), K("KeyL", "L"), K("Semicolon", ";", ":"), K("Quote", "'", "\""),
+     K("Enter", "⏎", null, 2)],
+    [K("ShiftLeft", "Shift", null, 2), K("KeyZ", "Z"), K("KeyX", "X"), K("KeyC", "C"), K("KeyV", "V"), K("KeyB", "B"),
+     K("KeyN", "N"), K("KeyM", "M"), K("Comma", ",", "<"), K("Period", ".", ">"), K("Slash", "/", "?"),
+     K("ShiftRight", "Shift", null, 2)],
+    [K("ControlLeft", "Ctrl"), K("MetaLeft", "⊞"), K("AltLeft", "Alt"), K("Space", "Space", null, 7), K("AltRight", "Alt"),
+     K("ContextMenu", "☰"), K("ControlRight", "Ctrl")],
+  ];
+  var NAV_ROWS = [
+    [K("PrintScreen", "PrtSc"), K("ScrollLock", "ScrLk"), K("Pause", "Pause")],
+    [K("Insert", "Ins"), K("Home", "Home"), K("PageUp", "PgUp")],
+    [K("Delete", "Del"), K("End", "End"), K("PageDown", "PgDn")],
+    [EMPTY, EMPTY, EMPTY],
+    [EMPTY, K("ArrowUp", "↑"), EMPTY],
+    [K("ArrowLeft", "←"), K("ArrowDown", "↓"), K("ArrowRight", "→")],
+  ];
+  var NUMPAD_ROWS = [
+    [K("NumLock", "Num"), K("NumpadDivide", "/"), K("NumpadMultiply", "*"), K("NumpadSubtract", "-")],
+    [K("Numpad7", "7"), K("Numpad8", "8"), K("Numpad9", "9"), K("NumpadAdd", "+")],
+    [K("Numpad4", "4"), K("Numpad5", "5"), K("Numpad6", "6"), EMPTY],
+    [K("Numpad1", "1"), K("Numpad2", "2"), K("Numpad3", "3"), K("NumpadEnter", "⏎")],
+    [K("Numpad0", "0", null, 2), K("NumpadDecimal", ".")],
+  ];
+
+  var keyElements = {};
+  // Explicit row/column placement (rather than relying on grid
+  // auto-flow to wrap every 15 columns) - some rows below (the F-row,
+  // the bottom row) don't sum to exactly 15 units, which with plain
+  // auto-flow packing causes each following row to creep sideways
+  // into the previous row's leftover columns - the "keyboard looks
+  // inverted/skewed" bug. Every key is now pinned to its real
+  // (row, column) position, so a short row just leaves trailing empty
+  // space instead of dragging every row after it out of alignment.
+  function renderKeyGrid(containerId, rows) {
+    var container = document.getElementById(containerId);
+    rows.forEach(function (row, rowIndex) {
+      var col = 1;
+      row.forEach(function (spec) {
+        var el = document.createElement("div");
+        el.style.gridRow = String(rowIndex + 1);
+        el.style.gridColumn = col + " / span " + spec.span;
+        if (spec.empty) {
+          el.className = "diag-key is-empty";
+        } else {
+          el.className = "diag-key";
+          el.innerHTML = spec.sub ? (spec.sub + '<span class="sub">' + spec.label + "</span>") : spec.label;
+          keyElements[spec.code] = el;
+        }
+        container.appendChild(el);
+        col += spec.span;
+      });
+    });
+  }
+  renderKeyGrid("kbMain", MAIN_ROWS);
+  renderKeyGrid("kbNav", NAV_ROWS);
+  renderKeyGrid("kbNumpad", NUMPAD_ROWS);
+
+  var keyHeldSince = {}; // currently-held keys only, used for the stuck-key check
+  var keyPressTimestamps = [];
+
+  function resetKeyboard() {
+    Object.values(keyElements).forEach(function (el) { el.classList.remove("is-active", "is-stuck"); });
+    keyHeldSince = {};
+    keyPressTimestamps = [];
+    document.getElementById("kKps").textContent = "0";
+    document.getElementById("kLastKey").textContent = "—";
+    document.getElementById("kStuckWarning").style.display = "none";
+    document.getElementById("kEventKey").textContent = "—";
+    document.getElementById("kEventCode").textContent = "—";
+    document.getElementById("kEventKeyCode").textContent = "—";
+  }
+
+  // Keys that, left unhandled, trigger a *browser/app* action instead
+  // of just being a key press to visualize - most notably Backspace,
+  // which base.html's global handler treats as "navigate back" for
+  // convenience elsewhere in the app. Space can scroll the page or
+  // "click" a focused button; Tab shifts focus off the test entirely;
+  // F-keys/arrows can trigger browser devtools/scroll/etc. All of
+  // these are suppressed ONLY while this keyboard panel is the one
+  // actually visible, so the rest of the app is completely unaffected.
+  var SUPPRESS_DEFAULT_CODES = {
+    Backspace: 1, Tab: 1, Space: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1,
+    F1: 1, F2: 1, F3: 1, F4: 1, F5: 1, F6: 1, F7: 1, F8: 1, F9: 1, F10: 1, F11: 1, F12: 1,
+    MetaLeft: 1, MetaRight: 1,
+  };
+
+  function isKeyboardPanelActive() {
+    return document.getElementById("diagKeyboard").hidden === false;
+  }
+
+  // CRITICAL FIX: base.html has a separate, unrelated global Backspace
+  // listener (keydown on `document`, bubble phase) that calls
+  // history.back() as a navigation shortcut elsewhere in the app. That
+  // script tag runs before this one, so on a plain bubble-phase
+  // listener here, base.html's handler would already have fired
+  // history.back() by the time we got a chance to preventDefault().
+  // Registering THIS listener with `capture: true` makes it run during
+  // the capture phase, which always completes before any bubble-phase
+  // listener on the same node - so as long as we stopPropagation()
+  // here, base.html's handler never runs at all for Backspace while
+  // this test is open. Nothing in base.html itself is touched, so its
+  // Backspace-navigation behavior elsewhere in the POS keeps working
+  // exactly as before.
+  document.addEventListener("keydown", function (e) {
+    if (!isKeyboardPanelActive()) return;
+    if (SUPPRESS_DEFAULT_CODES[e.code]) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    var el = keyElements[e.code];
+    if (el) el.classList.add("is-active"); // stays highlighted - never removed on keyup
+    if (!keyHeldSince[e.code]) keyHeldSince[e.code] = Date.now();
+
+    document.getElementById("kEventKey").textContent = e.key;
+    document.getElementById("kEventCode").textContent = e.code;
+    document.getElementById("kEventKeyCode").textContent = e.keyCode;
+    document.getElementById("kLastKey").textContent = e.key === " " ? "Space" : e.key;
+
+    // Repeat events (OS auto-repeat while held) must NOT count toward
+    // KPS - only the initial press does, otherwise holding one key
+    // would falsely spike the counter.
+    if (!e.repeat) keyPressTimestamps.push(Date.now());
+
+    // Ctrl+Shift+Alt held together is the "reset" gesture for this
+    // test - same effect as pressing the "إعادة تعيين" button. Uses
+    // e.ctrlKey/shiftKey/altKey (not code-matching e.g. ControlLeft),
+    // so it fires regardless of which physical left/right modifier
+    // keys are used, as soon as all three are down together.
+    if (e.ctrlKey && e.shiftKey && e.altKey) {
+      resetKeyboard();
+    }
+  }, true);
+  document.addEventListener("keyup", function (e) {
+    if (!isKeyboardPanelActive()) return;
+    if (SUPPRESS_DEFAULT_CODES[e.code]) e.stopPropagation();
+    // Intentionally does NOT remove "is-active" - the key stays
+    // highlighted so the technician can see it was detected, even
+    // after release. Only "currently held" bookkeeping (for the stuck
+    // check) and the transient stuck-red state clear on release.
+    var el = keyElements[e.code];
+    if (el) el.classList.remove("is-stuck");
+    delete keyHeldSince[e.code];
+  }, true);
+
+  setInterval(function () {
+    if (!isKeyboardPanelActive()) return;
+    var now = Date.now();
+    keyPressTimestamps = keyPressTimestamps.filter(function (t) { return now - t < 1000; });
+    document.getElementById("kKps").textContent = keyPressTimestamps.length;
+
+    var anyStuck = false;
+    Object.keys(keyHeldSince).forEach(function (code) {
+      if (now - keyHeldSince[code] > STUCK_THRESHOLD_MS) {
+        anyStuck = true;
+        var el = keyElements[code];
+        if (el) el.classList.add("is-stuck");
+      }
+    });
+    document.getElementById("kStuckWarning").style.display = anyStuck ? "" : "none";
+  }, 300);
+
+  // ============================================================
+  // MODULE 3: Display
+  // ============================================================
+  var DEAD_PIXEL_COLORS = [
+    { color: "#ff0000", label: "أحمر" }, { color: "#00ff00", label: "أخضر" },
+    { color: "#0000ff", label: "أزرق" }, { color: "#ffffff", label: "أبيض" },
+    { color: "#000000", label: "أسود" },
+  ];
+  var deadPixelIndex = 0;
+  var overlay = document.getElementById("deadPixelOverlay");
+
+  function showDeadPixelStep() {
+    var step = DEAD_PIXEL_COLORS[deadPixelIndex];
+    overlay.style.background = step.color;
+    document.getElementById("deadPixelLabel").textContent = step.label + " (" + (deadPixelIndex + 1) + "/" + DEAD_PIXEL_COLORS.length + ")";
+  }
+  function exitDeadPixelTest() {
+    overlay.classList.remove("is-open");
+    document.removeEventListener("keydown", deadPixelKeyHandler);
+  }
+  function deadPixelKeyHandler(e) {
+    if (e.code === "Space") {
+      e.preventDefault();
+      deadPixelIndex++;
+      if (deadPixelIndex >= DEAD_PIXEL_COLORS.length) { exitDeadPixelTest(); return; }
+      showDeadPixelStep();
+    } else if (e.code === "Escape") {
+      exitDeadPixelTest();
+    }
+  }
+  document.getElementById("startDeadPixelTest").addEventListener("click", function () {
+    deadPixelIndex = 0;
+    overlay.classList.add("is-open");
+    showDeadPixelStep();
+    document.addEventListener("keydown", deadPixelKeyHandler);
+  });
+
+  // While the user is on the monitor-test tab (and the fullscreen dead-
+  // pixel test isn't already running - that has its own Space handler
+  // above, for advancing/exiting it), pressing Space starts the test
+  // directly, so they don't have to also click the button. Scoped
+  // strictly to this tab being the visible one, so Space keeps its
+  // normal behavior (scrolling, activating a focused button, etc.)
+  // everywhere else in the app.
+  function isDisplayPanelActive() {
+    return document.getElementById("diagDisplay").hidden === false;
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.code !== "Space") return;
+    if (!isDisplayPanelActive()) return;
+    if (overlay.classList.contains("is-open")) return; // let deadPixelKeyHandler own it
+    e.preventDefault();
+    document.getElementById("startDeadPixelTest").click();
+  });
+
+  // Monitor info: real attributes only - never invented values.
+  // window.screen.* (resolution/DPR/color depth as seen by the
+  // browser engine) is standard and needs no bridge call. Model,
+  // manufacturer, serial, and the actual OS-driven resolution/refresh
+  // rate per physical display come from get_monitor_info() over the
+  // pywebview bridge (WMI EDID + Win32 display API - see run.py) since
+  // no browser exposes any of that to web content. Panel type (IPS/
+  // TN/VA/OLED) is intentionally never shown - it isn't exposed by
+  // EDID or any Windows API, so it can't be reported without guessing.
+  function loadMonitorInfo() {
+    var note = document.getElementById("monitorInfoNote");
+    var grid = document.getElementById("monitorInfoGrid");
+    var cards = [];
+    cards.push({ name: "دقة نافذة المتصفح", meta: [screen.width + " × " + screen.height + " px"] });
+    cards.push({ name: "كثافة البكسل (DPR)", meta: [String(window.devicePixelRatio || 1)] });
+    if (screen.colorDepth) cards.push({ name: "عمق الألوان", meta: [screen.colorDepth + "-bit"] });
+    if (screen.orientation && screen.orientation.type) cards.push({ name: "الاتجاه", meta: [screen.orientation.type] });
+
+    function render() {
+      grid.innerHTML = "";
+      cards.forEach(function (c) {
+        var card = document.createElement("div");
+        card.className = "diag-usb-card";
+        card.innerHTML = '<div class="name">' + c.name + '</div>' + c.meta.map(function (m) { return '<div class="meta">' + m + '</div>'; }).join("");
+        grid.appendChild(card);
+      });
+      note.textContent = "";
+    }
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_monitor_info) {
+      window.pywebview.api.get_monitor_info().then(function (monitors) {
+        (monitors || []).forEach(function (m) {
+          var meta = [];
+          if (m.model) meta.push("الموديل: " + m.model);
+          if (m.manufacturer) meta.push("الشركة: " + m.manufacturer);
+          if (m.width && m.height) meta.push("الدقة الفعلية: " + m.width + " × " + m.height);
+          if (m.refresh_hz) meta.push("معدل التحديث: " + m.refresh_hz + " Hz");
+          if (m.serial) meta.push("الرقم التسلسلي: " + m.serial);
+          if (meta.length) cards.unshift({ name: m.name || "الشاشة", meta: meta });
+        });
+        render();
+      }).catch(render);
+    } else {
+      render();
+    }
+  }
+
+  // ============================================================
+  // Reset button wiring
+  // ============================================================
+  document.querySelectorAll("[data-reset]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      switch (btn.dataset.reset) {
+        case "mouse": resetMouse(); break;
+        case "keyboard": resetKeyboard(); break;
+        case "display": break; // dead-pixel/gradient tests have no persistent state to clear
+      }
+    });
+  });
+
+  resetMouse();
+  loadMonitorInfo();
+  // Keyboard tab is the default visible one on load - arm the Windows-
+  // key suppression immediately rather than waiting for a tab click.
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.suppress_windows_key) {
+    window.pywebview.api.suppress_windows_key(true).catch(function () {});
+  }
+})();
+</script>
+{% endblock %}

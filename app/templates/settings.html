@@ -76,6 +76,17 @@
       </div>
       <button type="button" class="btn" id="saveWindowSizeButton">حفظ حجم النافذة</button>
     </div>
+
+    <!-- ============================================================
+         Hardware diagnostics - desktop-app only, same visibility rule
+         as windowSizePanel above (a mouse/keyboard/monitor test only
+         makes sense on the physical machine running the app).
+         ============================================================ -->
+    <div class="panel" id="hardwareTestPanel" hidden>
+      <h2>تشخيص الأجهزة</h2>
+      <p class="subtitle">اختبار الفأرة ولوحة المفاتيح والشاشة على هذا الجهاز.</p>
+      <a href="{{ url_for('diagnostics.index') }}" class="btn btn-primary">اختبار الأجهزة</a>
+    </div>
   </div>
 
   <div>
@@ -276,6 +287,7 @@
   var websitePanel = document.getElementById("websiteAccessPanel");
   var logPanel = document.getElementById("logViewerPanel");
   var backupPanel = document.getElementById("backupExitPanel");
+  var hardwareTestPanel = document.getElementById("hardwareTestPanel");
   var desktopOnlyNote = document.getElementById("desktopOnlyNote");
 
   function showDesktopOnlyNote() {
@@ -492,6 +504,7 @@
     if (typeof websitePanel !== 'undefined') websitePanel.hidden = false;
     if (typeof logPanel !== 'undefined') logPanel.hidden = false;
     if (typeof backupPanel !== 'undefined') backupPanel.hidden = false;
+    if (typeof hardwareTestPanel !== 'undefined') hardwareTestPanel.hidden = false;
     if (typeof desktopOnlyNote !== 'undefined') desktopOnlyNote.hidden = true;
 
     api.get_settings_data().then(function (data) {

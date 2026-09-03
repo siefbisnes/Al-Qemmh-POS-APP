@@ -1,24 +1,44 @@
-{% extends "base.html" %}
-{% block title %}تسجيل الدخول - القمة{% endblock %}
-{% block content %}
+{% extends "base.html" %} {% block title %}تسجيل الدخول - القمة{% endblock %} {%
+block content %}
 <div class="login-shell">
-  <div class="login-card">
-    <div class="login-brand">
-      <div class="brand-name">Al Qemma</div>
-      <p class="login-welcome">مرحباً بك في موقع إدارة متجر القمة</p>
+    <div class="login-card">
+        <div class="login-brand">
+            <div class="brand-name">Al Qemma</div>
+            <p class="login-welcome">مرحباً بك في موقع إدارة متجر القمة</p>
+        </div>
+        <form method="post" class="login-form" autocomplete="off">
+            <div class="field">
+                <label for="username">اسم المستخدم</label>
+                <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    value=""
+                    placeholder=""
+                    autocomplete="username"
+                    required
+                    autofocus
+                />
+            </div>
+            <div class="field">
+                <label for="password">كلمة المرور</label>
+                <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                />
+            </div>
+            <button type="submit" class="btn btn-primary login-submit">
+                تسجيل الدخول
+            </button>
+        </form>
+        <a
+            href="{{ url_for('diagnostics.index') }}"
+            class="login-diagnostics-link"
+            >🛠️ تشخيص الأجهزة (فأرة، لوحة مفاتيح، شاشة...)</a
+        >
     </div>
-    <form method="post" class="login-form" autocomplete="off">
-      <div class="field">
-        <label for="username">اسم المستخدم</label>
-        <input id="username" name="username" type="text" value=""
-               placeholder="" autocomplete="username" required autofocus>
-      </div>
-      <div class="field">
-        <label for="password">كلمة المرور</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" required>
-      </div>
-      <button type="submit" class="btn btn-primary login-submit">تسجيل الدخول</button>
-    </form>
-  </div>
 </div>
 {% endblock %}

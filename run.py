@@ -1758,6 +1758,102 @@ def _print_file_silently(path, logger):
 
 
 # ============================================================
+# Monitor diagnostics helpers (used by AppAPI.get_monitor_info, called
+# from the hardware-diagnostics "monitor" tab in diagnostics.html)
+# ============================================================
+def _run_powershell_json(command, timeout=15):
+    """Run a PowerShell command, return parsed JSON (always a list) or
+    None on any failure. Never raises - callers must treat None as
+    "unavailable", never as "empty/healthy/etc."."""
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True, text=True, timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    try:
+        data = json.loads(proc.stdout)
+    except ValueError:
+        return None
+    return data if isinstance(data, list) else [data]
+
+
+def _get_display_settings():
+    """Per-physical-display resolution + refresh rate via the raw
+    Win32 API (EnumDisplayDevices + EnumDisplaySettingsW) - the actual
+    current mode Windows is driving that display at, not a JS
+    requestAnimationFrame guess. Windows-only; [] on any failure.
+    """
+    if sys.platform != "win32":
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    class DEVMODEW(ctypes.Structure):
+        _fields_ = [
+            ("dmDeviceName", wintypes.WCHAR * 32), ("dmSpecVersion", wintypes.WORD),
+            ("dmDriverVersion", wintypes.WORD), ("dmSize", wintypes.WORD),
+            ("dmDriverExtra", wintypes.WORD), ("dmFields", wintypes.DWORD),
+            ("dmOrientation", ctypes.c_short), ("dmPaperSize", ctypes.c_short),
+            ("dmPaperLength", ctypes.c_short), ("dmPaperWidth", ctypes.c_short),
+            ("dmScale", ctypes.c_short), ("dmCopies", ctypes.c_short),
+            ("dmDefaultSource", ctypes.c_short), ("dmPrintQuality", ctypes.c_short),
+            ("dmColor", ctypes.c_short), ("dmDuplex", ctypes.c_short),
+            ("dmYResolution", ctypes.c_short), ("dmTTOption", ctypes.c_short),
+            ("dmCollate", ctypes.c_short), ("dmFormName", wintypes.WCHAR * 32),
+            ("dmLogPixels", wintypes.WORD), ("dmBitsPerPel", wintypes.DWORD),
+            ("dmPelsWidth", wintypes.DWORD), ("dmPelsHeight", wintypes.DWORD),
+            ("dmDisplayFlags", wintypes.DWORD), ("dmDisplayFrequency", wintypes.DWORD),
+            ("dmICMMethod", wintypes.DWORD), ("dmICMIntent", wintypes.DWORD),
+            ("dmMediaType", wintypes.DWORD), ("dmDitherType", wintypes.DWORD),
+            ("dmReserved1", wintypes.DWORD), ("dmReserved2", wintypes.DWORD),
+            ("dmPanningWidth", wintypes.DWORD), ("dmPanningHeight", wintypes.DWORD),
+        ]
+
+    class DISPLAY_DEVICEW(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD), ("DeviceName", wintypes.WCHAR * 32),
+            ("DeviceString", wintypes.WCHAR * 128), ("StateFlags", wintypes.DWORD),
+            ("DeviceID", wintypes.WCHAR * 128), ("DeviceKey", wintypes.WCHAR * 128),
+        ]
+
+    ENUM_CURRENT_SETTINGS = -1
+    DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x1
+
+    try:
+        user32 = ctypes.windll.user32
+    except (AttributeError, OSError):
+        return []
+
+    results = []
+    i = 0
+    while True:
+        dd = DISPLAY_DEVICEW()
+        dd.cb = ctypes.sizeof(DISPLAY_DEVICEW)
+        if not user32.EnumDisplayDevicesW(None, i, ctypes.byref(dd), 0):
+            break
+        i += 1
+        if not (dd.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP):
+            continue
+        dm = DEVMODEW()
+        dm.dmSize = ctypes.sizeof(DEVMODEW)
+        if user32.EnumDisplaySettingsW(dd.DeviceName, ENUM_CURRENT_SETTINGS, ctypes.byref(dm)):
+            results.append({
+                "width": dm.dmPelsWidth,
+                "height": dm.dmPelsHeight,
+                # A 0/1 Hz reading means "not meaningfully reported"
+                # (common on some virtual/RDP adapters) - treated as
+                # unknown rather than shown as a real value.
+                "refresh_hz": dm.dmDisplayFrequency if dm.dmDisplayFrequency > 1 else None,
+            })
+    return results
+
+
+# ============================================================
 # js_api bridge — everything under window.pywebview.api in settings.html
 # ============================================================
 class AppAPI:
@@ -1779,6 +1875,112 @@ class AppAPI:
         self._logger = logger
         self._shutdown_guard = shutdown_guard
         self._backup = backup_manager or BackupManager(logger=logger)
+        self._win_key_hook = None
+        self._win_key_hook_proc = None
+
+    # ---- Hardware diagnostics: keyboard test ----
+    def suppress_windows_key(self, enable):
+        """The keyboard-test tab in diagnostics.html calls this as
+        window.pywebview.api.suppress_windows_key(true/false) when it
+        becomes the visible tab / when it's left, to stop pressing the
+        physical Windows key from popping the OS Start menu mid-test.
+
+        This can only be done natively - Windows intercepts the Win
+        key as a global shortcut before any web page (or even most
+        native app windows) ever sees the keydown, so no amount of
+        JS preventDefault() can stop it; it needs a low-level keyboard
+        hook (WH_KEYBOARD_LL) that swallows VK_LWIN/VK_RWIN before the
+        shell does. Windows-only; a no-op elsewhere.
+        """
+        if sys.platform != "win32":
+            return False
+        import ctypes
+        from ctypes import wintypes
+
+        if enable:
+            if self._win_key_hook:
+                return True  # already installed
+
+            WH_KEYBOARD_LL = 13
+            WM_KEYDOWN = 0x0100
+            WM_SYSKEYDOWN = 0x0104
+            VK_LWIN = 0x5B
+            VK_RWIN = 0x5C
+            HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+
+            def _hook_proc(n_code, w_param, l_param):
+                if n_code == 0 and w_param in (WM_KEYDOWN, WM_SYSKEYDOWN):
+                    vk_code = ctypes.cast(l_param, ctypes.POINTER(wintypes.DWORD))[0]
+                    if vk_code in (VK_LWIN, VK_RWIN):
+                        return 1  # swallow - Start menu never opens
+                return ctypes.windll.user32.CallNextHookEx(None, n_code, w_param, l_param)
+
+            # Keep a reference to the ctypes callback on self - if it
+            # gets garbage-collected while the hook is still installed,
+            # Windows calling into it crashes the process.
+            self._win_key_hook_proc = HOOKPROC(_hook_proc)
+            self._win_key_hook = ctypes.windll.user32.SetWindowsHookExW(
+                WH_KEYBOARD_LL, self._win_key_hook_proc, None, 0
+            )
+            if not self._win_key_hook:
+                self._logger.warning("suppress_windows_key: SetWindowsHookExW failed")
+                self._win_key_hook_proc = None
+                return False
+            return True
+
+        if self._win_key_hook:
+            ctypes.windll.user32.UnhookWindowsHookEx(self._win_key_hook)
+            self._win_key_hook = None
+            self._win_key_hook_proc = None
+        return True
+
+    # ---- Hardware diagnostics: monitor test ----
+    def get_monitor_info(self):
+        """Called from diagnostics.html's monitor tab. Returns a list
+        of dicts: { name, manufacturer, model, serial, width, height,
+        refresh_hz }, merging:
+          - WMI WmiMonitorID (EDID manufacturer/model/serial - never
+            exposed to web content by any browser)
+          - the Win32 API's current display mode (real resolution and
+            refresh rate Windows is actually driving that panel at)
+        Matched best-effort by enumeration order (Windows doesn't
+        expose a shared key between the two APIs). Any field genuinely
+        unavailable is left out - never fabricated. Panel type (IPS/
+        TN/VA/OLED) is deliberately not included: it isn't exposed by
+        EDID or any standard Windows API, so it can't be reported
+        without guessing.
+        """
+        edid_monitors = _run_powershell_json(
+            "Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorID | "
+            "Select-Object ManufacturerName,UserFriendlyName,SerialNumberID | ConvertTo-Json"
+        ) or []
+        display_settings = _get_display_settings()
+
+        def _decode(arr):
+            if not arr:
+                return None
+            try:
+                return "".join(chr(c) for c in arr if c).strip("\x00").strip()
+            except (TypeError, ValueError):
+                return None
+
+        results = []
+        count = max(len(edid_monitors), len(display_settings))
+        for i in range(count):
+            edid = edid_monitors[i] if i < len(edid_monitors) else {}
+            mode = display_settings[i] if i < len(display_settings) else {}
+            entry = {
+                "name": "الشاشة " + str(i + 1),
+                "manufacturer": _decode(edid.get("ManufacturerName")),
+                "model": _decode(edid.get("UserFriendlyName")),
+                "serial": _decode(edid.get("SerialNumberID")),
+                "width": mode.get("width"),
+                "height": mode.get("height"),
+                "refresh_hz": mode.get("refresh_hz"),
+            }
+            if any(v for k, v in entry.items() if k != "name"):
+                results.append(entry)
+        return results
 
     # ---- Website Access + Backup panel ----
     def get_settings_data(self):
