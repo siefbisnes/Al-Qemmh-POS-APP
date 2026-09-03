@@ -515,6 +515,13 @@
   // ============================================================
   // MODULE 3: Display
   // ============================================================
+  // Preferred path: the color test runs in its own separate pywebview
+  // OS window (color_test.html, opened via
+  // AppAPI.open_color_test_window in run.py) - a genuinely different
+  // window/surface from this one, not an overlay layered inside the
+  // main app window. Falls back to an in-page fullscreen overlay only
+  // when there's no pywebview bridge at all (e.g. testing in a plain
+  // browser), so the test still works there too.
   var DEAD_PIXEL_COLORS = [
     { color: "#ff0000", label: "أحمر" }, { color: "#00ff00", label: "أخضر" },
     { color: "#0000ff", label: "أزرق" }, { color: "#ffffff", label: "أبيض" },
@@ -531,6 +538,9 @@
   function exitDeadPixelTest() {
     overlay.classList.remove("is-open");
     document.removeEventListener("keydown", deadPixelKeyHandler);
+    if (document.fullscreenElement === overlay) {
+      document.exitFullscreen().catch(function () {});
+    }
   }
   function deadPixelKeyHandler(e) {
     if (e.code === "Space") {
@@ -542,11 +552,25 @@
       exitDeadPixelTest();
     }
   }
-  document.getElementById("startDeadPixelTest").addEventListener("click", function () {
+  document.addEventListener("fullscreenchange", function () {
+    if (!document.fullscreenElement && overlay.classList.contains("is-open")) {
+      exitDeadPixelTest();
+    }
+  });
+  function startInPageFallback() {
     deadPixelIndex = 0;
     overlay.classList.add("is-open");
     showDeadPixelStep();
     document.addEventListener("keydown", deadPixelKeyHandler);
+    var request = overlay.requestFullscreen || overlay.webkitRequestFullscreen;
+    if (request) request.call(overlay).catch(function () {});
+  }
+  document.getElementById("startDeadPixelTest").addEventListener("click", function () {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_color_test_window) {
+      window.pywebview.api.open_color_test_window().catch(startInPageFallback);
+    } else {
+      startInPageFallback();
+    }
   });
 
   // While the user is on the monitor-test tab (and the fullscreen dead-
