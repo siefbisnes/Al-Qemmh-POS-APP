@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>اختبار الألوان</title>
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; cursor:none; }
+  #hint {
+    position:fixed; bottom:1.5rem; left:0; right:0; text-align:center;
+    color:rgba(255,255,255,.55); font:14px/1.4 system-ui, sans-serif; cursor:default; user-select:none;
+  }
+</style>
+</head>
+<body>
+<div id="hint">مسافة للتالي · Esc للخروج — <span id="label"></span></div>
+<script>
+  // This page runs in its OWN separate pywebview window (created by
+  // AppAPI.open_color_test_window in run.py) - genuinely a different
+  // OS window/surface from the main app, not an overlay layered inside
+  // it. Space/Escape are handled here directly since there's no other
+  // page content or global handlers (like base.html's Backspace
+  // navigation) to conflict with in this dedicated window.
+  var COLORS = [
+    { color: "#ff0000", label: "أحمر" }, { color: "#00ff00", label: "أخضر" },
+    { color: "#0000ff", label: "أزرق" }, { color: "#ffffff", label: "أبيض" },
+    { color: "#000000", label: "أسود" },
+  ];
+  var index = 0;
+
+  function showStep() {
+    var step = COLORS[index];
+    document.body.style.background = step.color;
+    document.getElementById("label").textContent = step.label + " (" + (index + 1) + "/" + COLORS.length + ")";
+  }
+
+  function closeWindow() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.close_color_test_window) {
+      window.pywebview.api.close_color_test_window();
+    } else {
+      window.close();
+    }
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space") {
+      e.preventDefault();
+      index++;
+      if (index >= COLORS.length) { closeWindow(); return; }
+      showStep();
+    } else if (e.code === "Escape") {
+      closeWindow();
+    }
+  });
+
+  showStep();
+</script>
+</body>
+</html>

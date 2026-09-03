@@ -1877,6 +1877,7 @@ class AppAPI:
         self._backup = backup_manager or BackupManager(logger=logger)
         self._win_key_hook = None
         self._win_key_hook_proc = None
+        self._color_test_window = None
 
     # ---- Hardware diagnostics: keyboard test ----
     def suppress_windows_key(self, enable):
@@ -1932,6 +1933,52 @@ class AppAPI:
             ctypes.windll.user32.UnhookWindowsHookEx(self._win_key_hook)
             self._win_key_hook = None
             self._win_key_hook_proc = None
+        return True
+
+    # ---- Hardware diagnostics: monitor color test ----
+    def open_color_test_window(self):
+        """Opens the dead-pixel color test in its OWN separate
+        pywebview window (color_test.html, no base.html chrome) rather
+        than as an overlay inside the main window - a real fullscreen
+        OS window/surface, following the same dynamic
+        webview.create_window() pattern already used above for the
+        backup popup.
+        """
+        if not HAS_GUI:
+            return False
+        if self._color_test_window is not None:
+            try:
+                self._color_test_window.restore()
+                return True
+            except Exception:
+                self._color_test_window = None
+
+        url = f"http://127.0.0.1:{self._server.port}/diagnostics/color-test"
+        try:
+            win = webview.create_window(
+                "اختبار الألوان", url,
+                fullscreen=True, frameless=True, on_top=True,
+                easy_drag=False, js_api=self,
+            )
+        except Exception as exc:
+            self._logger.error(f"open_color_test_window failed: {exc}")
+            return False
+
+        self._color_test_window = win
+
+        def _clear_ref():
+            self._color_test_window = None
+        win.events.closed += _clear_ref
+        return True
+
+    def close_color_test_window(self):
+        """Called from color_test.html on Space (last color)/Escape."""
+        if self._color_test_window is not None:
+            try:
+                self._color_test_window.destroy()
+            except Exception as exc:
+                self._logger.error(f"close_color_test_window failed: {exc}")
+            self._color_test_window = None
         return True
 
     # ---- Hardware diagnostics: monitor test ----
