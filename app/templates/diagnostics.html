@@ -429,11 +429,15 @@
   // "click" a focused button; Tab shifts focus off the test entirely;
   // F-keys/arrows can trigger browser devtools/scroll/etc. All of
   // these are suppressed ONLY while this keyboard panel is the one
+  // (Meta/PrintScreen here are for the browser-side event only; the
+  // OS-level Start-menu/screenshot/Alt+F4/Alt+Tab shortcuts they'd
+  // otherwise also trigger are blocked separately via the native hook
+  // installed by suppress_windows_key() below.)
   // actually visible, so the rest of the app is completely unaffected.
   var SUPPRESS_DEFAULT_CODES = {
     Backspace: 1, Tab: 1, Space: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1,
     F1: 1, F2: 1, F3: 1, F4: 1, F5: 1, F6: 1, F7: 1, F8: 1, F9: 1, F10: 1, F11: 1, F12: 1,
-    MetaLeft: 1, MetaRight: 1,
+    MetaLeft: 1, MetaRight: 1, PrintScreen: 1,
   };
 
   function isKeyboardPanelActive() {

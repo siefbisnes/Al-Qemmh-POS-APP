@@ -1883,15 +1883,22 @@ class AppAPI:
     def suppress_windows_key(self, enable):
         """The keyboard-test tab in diagnostics.html calls this as
         window.pywebview.api.suppress_windows_key(true/false) when it
-        becomes the visible tab / when it's left, to stop pressing the
-        physical Windows key from popping the OS Start menu mid-test.
+        becomes the visible tab / when it's left, to stop several
+        physical key combos from triggering their normal OS/shell
+        action mid-test instead of just registering as a detected key:
+        the Windows key (Start menu), PrintScreen (screenshot to
+        clipboard), Alt+F4 (close window), and Alt+Tab (task switch).
 
-        This can only be done natively - Windows intercepts the Win
-        key as a global shortcut before any web page (or even most
-        native app windows) ever sees the keydown, so no amount of
-        JS preventDefault() can stop it; it needs a low-level keyboard
-        hook (WH_KEYBOARD_LL) that swallows VK_LWIN/VK_RWIN before the
-        shell does. Windows-only; a no-op elsewhere.
+        All of these are intercepted by Windows before any web page -
+        or even most native app windows - ever sees the keydown, so no
+        amount of JS preventDefault() can stop them; it needs a
+        low-level keyboard hook (WH_KEYBOARD_LL) that swallows them
+        before the shell/window manager does. Windows-only; a no-op
+        elsewhere.
+
+        Note: Ctrl+Alt+Delete is the one combo that genuinely can't be
+        suppressed this way - it's a protected "secure attention
+        sequence" enforced below any user-mode hook, by design.
         """
         if sys.platform != "win32":
             return False
@@ -1902,18 +1909,33 @@ class AppAPI:
             if self._win_key_hook:
                 return True  # already installed
 
+            class KBDLLHOOKSTRUCT(ctypes.Structure):
+                _fields_ = [
+                    ("vkCode", wintypes.DWORD), ("scanCode", wintypes.DWORD),
+                    ("flags", wintypes.DWORD), ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.POINTER(wintypes.ULONG)),
+                ]
+
             WH_KEYBOARD_LL = 13
             WM_KEYDOWN = 0x0100
             WM_SYSKEYDOWN = 0x0104
+            LLKHF_ALTDOWN = 0x20
             VK_LWIN = 0x5B
             VK_RWIN = 0x5C
+            VK_SNAPSHOT = 0x2C  # PrintScreen
+            VK_TAB = 0x09
+            VK_F4 = 0x73
             HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
 
             def _hook_proc(n_code, w_param, l_param):
                 if n_code == 0 and w_param in (WM_KEYDOWN, WM_SYSKEYDOWN):
-                    vk_code = ctypes.cast(l_param, ctypes.POINTER(wintypes.DWORD))[0]
-                    if vk_code in (VK_LWIN, VK_RWIN):
-                        return 1  # swallow - Start menu never opens
+                    kb = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+                    vk_code = kb.vkCode
+                    alt_down = bool(kb.flags & LLKHF_ALTDOWN)
+                    if vk_code in (VK_LWIN, VK_RWIN, VK_SNAPSHOT):
+                        return 1  # swallow - Start menu / screenshot never triggers
+                    if alt_down and vk_code in (VK_F4, VK_TAB):
+                        return 1  # swallow - window doesn't close, no task switch
                 return ctypes.windll.user32.CallNextHookEx(None, n_code, w_param, l_param)
 
             # Keep a reference to the ctypes callback on self - if it
