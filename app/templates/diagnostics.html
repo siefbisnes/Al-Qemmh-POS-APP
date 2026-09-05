@@ -124,6 +124,7 @@
   }
   .diag-mouse-btn.is-active { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:var(--shadow-card); }
   .diag-mouse-btn.was-clicked { border-color:var(--accent); color:var(--accent); }
+  .diag-mouse-btn.is-longpress { background:#000; border-color:#000; color:#fff; }
 
   /* The entire box is the hit-target (not a tiny button) - it just
      needs to be focusable/clickable and cover the visible area; all
@@ -262,6 +263,11 @@
   var mouseFlashClass = { 0: "flash-left", 1: "flash-middle", 2: "flash-right" };
   var mouseHeldSince = {};
   var STUCK_THRESHOLD_MS = 4000;
+  // A quick click should never show the black long-press state at
+  // all - only a hold longer than this does.
+  var LONG_PRESS_MS = 600;
+  var longPressTimers = {};
+  var longPressActive = {};
   var mouseZone = document.getElementById("mouseTestZone");
 
   function updateMouseButtonUI(button, isDown) {
@@ -271,10 +277,29 @@
     if (isDown) {
       el.classList.add("is-active", "was-clicked");
       mouseHeldSince[button] = Date.now();
+      longPressTimers[button] = setTimeout(function () {
+        longPressActive[button] = true;
+        el.classList.add("is-longpress");
+      }, LONG_PRESS_MS);
     } else {
-      el.classList.remove("is-active");
+      clearTimeout(longPressTimers[button]);
+      delete longPressTimers[button];
       delete mouseHeldSince[button];
       document.getElementById("mStuckWarning").style.display = "none";
+
+      if (longPressActive[button]) {
+        // Was held long enough to turn black - on release it goes
+        // back to blue (a brief is-active flash) before settling into
+        // the normal "was clicked" outline, instead of just vanishing
+        // straight from black.
+        delete longPressActive[button];
+        el.classList.remove("is-longpress");
+        el.classList.add("is-active");
+        setTimeout(function () { el.classList.remove("is-active"); }, 200);
+      } else {
+        // Ordinary short click - never shows the black state at all.
+        el.classList.remove("is-active");
+      }
     }
   }
 
@@ -318,8 +343,11 @@
   }, 500);
 
   function resetMouse() {
+    Object.keys(longPressTimers).forEach(function (btn) { clearTimeout(longPressTimers[btn]); });
+    longPressTimers = {};
+    longPressActive = {};
     Object.values(mouseButtons).forEach(function (id) {
-      document.getElementById(id).classList.remove("is-active", "was-clicked");
+      document.getElementById(id).classList.remove("is-active", "was-clicked", "is-longpress");
     });
     mouseHeldSince = {};
     document.getElementById("mStuckWarning").style.display = "none";
