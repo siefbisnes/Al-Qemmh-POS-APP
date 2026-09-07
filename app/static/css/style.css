@@ -664,29 +664,18 @@ textarea:focus-visible {
     cursor: pointer;
     background: var(--surface);
     color: var(--text-muted);
-<<<<<<< HEAD
-    border-left: 1px solid var(--border);
-    border-right: none;
-    font-weight: 600;
-}
-.toggle-pill-group label:last-child {
-    border-left: none;
-=======
     font-weight: 600;
     box-sizing: border-box;
     border-inline-end: 1px solid var(--border);
 }
 .toggle-pill-group label:last-of-type {
     border-inline-end: none;
->>>>>>> 9ad7f88 (Initial commit)
 }
 .toggle-pill-group input:checked + label,
 .toggle-pill-group label:hover {
     background: var(--accent);
     color: white;
 }
-<<<<<<< HEAD
-=======
 .field .toggle-pill-group label {
     font-size: 0.92rem;
     color: var(--text-muted);
@@ -694,7 +683,6 @@ textarea:focus-visible {
 .field .toggle-pill-group input:checked + label {
     color: #fff;
 }
->>>>>>> 9ad7f88 (Initial commit)
 
 /* ===================== buttons ===================== */
 
@@ -1268,13 +1256,10 @@ flash-stack {
     background: var(--danger-soft) !important;
     color: var(--danger) !important;
 }
-<<<<<<< HEAD
-=======
 .order-status-pill.order-status-delivered.is-collected {
     background: var(--success-soft, #d1fae5) !important;
     color: var(--success, #059669) !important;
 }
->>>>>>> 9ad7f88 (Initial commit)
 
 /* row tint on the orders list, matching the status pill colors.
    !important + the full table.data-table prefix guarantees this wins

@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 
-=======
->>>>>>> 9ad7f88 (Initial commit)
 import os
 import sys
 
@@ -24,18 +21,9 @@ else:
 
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
 
-<<<<<<< HEAD
 class Config:
     # --- Core ---
     SECRET_KEY = os.environ.get("ALQEMMA_SECRET_KEY", "change-this-for-anything-public-facing")
-=======
-
-class Config:
-    # --- Core ---
-    SECRET_KEY = os.environ.get(
-        "ALQEMMA_SECRET_KEY", "change-this-for-anything-public-facing"
-    )
->>>>>>> 9ad7f88 (Initial commit)
     DATABASE_PATH = os.path.join(INSTANCE_DIR, "alqemma.db")
     SCHEMA_PATH = os.path.join(BUNDLE_DIR, "schema.sql")
 
@@ -57,18 +45,8 @@ class Config:
     ADMIN_PASSWORD = os.environ.get("ALQEMMA_ADMIN_PASSWORD", "Ahmed145@")[0:255]
 
     # --- Web Push / PWA ---
-<<<<<<< HEAD
     VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "BOpg6LStE5fE76DIgmT1ZKzaw9trSmZBhLtaXfzfuU5yiJA2skIBCDCIQXneO0uCaySkijDGJRZZbagkGMyVFSM")
     VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "ClXEGMnuSOlC2_7V_6YCBB6eqVg2rHAOZHU7cGL4DGg")
-=======
-    VAPID_PUBLIC_KEY = os.environ.get(
-        "VAPID_PUBLIC_KEY",
-        "BOpg6LStE5fE76DIgmT1ZKzaw9trSmZBhLtaXfzfuU5yiJA2skIBCDCIQXneO0uCaySkijDGJRZZbagkGMyVFSM",
-    )
-    VAPID_PRIVATE_KEY = os.environ.get(
-        "VAPID_PRIVATE_KEY", "ClXEGMnuSOlC2_7V_6YCBB6eqVg2rHAOZHU7cGL4DGg"
-    )
->>>>>>> 9ad7f88 (Initial commit)
     VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:alerts@alqemma.local")
     PUSH_SUBSCRIPTIONS_PATH = os.path.join(INSTANCE_DIR, "push_subscriptions.json")
 
@@ -81,18 +59,8 @@ class Config:
     #   TAILSCALE_OAUTH_CLIENT_ID     e.g. "kXXXXXXXXXXXX"        (client ID, not secret)
     #   TAILSCALE_OAUTH_CLIENT_SECRET e.g. "tskey-client-kXXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
     #   TAILSCALE_TAILNET             e.g. "example.com" or "you@github"
-<<<<<<< HEAD
     TAILSCALE_OAUTH_CLIENT_ID = os.environ.get("TAILSCALE_OAUTH_CLIENT_ID", "knHAGKegyY11CNTRL")
     TAILSCALE_OAUTH_CLIENT_SECRET = os.environ.get("TAILSCALE_OAUTH_CLIENT_SECRET", "tskey-client-knHAGKegyY11CNTRL-Hb6zi5xhi6bBSgF1U4Gf5bVVaFjC4izAf")
-=======
-    TAILSCALE_OAUTH_CLIENT_ID = os.environ.get(
-        "TAILSCALE_OAUTH_CLIENT_ID", "knHAGKegyY11CNTRL"
-    )
-    TAILSCALE_OAUTH_CLIENT_SECRET = os.environ.get(
-        "TAILSCALE_OAUTH_CLIENT_SECRET",
-        "tskey-client-knHAGKegyY11CNTRL-Hb6zi5xhi6bBSgF1U4Gf5bVVaFjC4izAf",
-    )
->>>>>>> 9ad7f88 (Initial commit)
     TAILSCALE_TAILNET = os.environ.get("TAILSCALE_TAILNET", "TwkJN2Hsc521CNTRL")
 
 
@@ -109,30 +77,23 @@ class Config:
 # ============================================================
 CHANGELOG = [
     {
-<<<<<<< HEAD
-=======
-        "version": "4.8.7",
+        "version": "4.7.7",
         "date": "2026-09-07",
         "patches": [
             "تعديل صيغة التاريخ في السجلات لتكون يوم/شهر/سنة بتوقيت مصر.",
-            'إزالة شركة الشحن "رايموند" وإضافة خيار كتابة اسم شركة شحن مخصصة.',
-            'إضافة حالة "تم التحصيل" لطلبات التوصيل بعد تسجيل استلام الدفع.',
+            "إزالة شركة الشحن \"رايموند\" وإضافة خيار كتابة اسم شركة شحن مخصصة.",
+            "إضافة حالة \"تم التحصيل\" لطلبات التوصيل بعد تسجيل استلام الدفع.",
             "منع الاختيار الافتراضي في نموذج المصروفات/المشتريات وطلب اختيار صريح.",
         ],
         "notes": [],
         "user_must_do": [],
     },
     {
->>>>>>> 9ad7f88 (Initial commit)
         "version": "4.7.6",
         "date": "2026-08-27",
         "patches": [
             "تحسين نظام تحديث Tailscale.",
-<<<<<<< HEAD
             "إضافة بطاقة \"فيزا البريد\".",
-=======
-            'إضافة بطاقة "فيزا البريد".',
->>>>>>> 9ad7f88 (Initial commit)
         ],
         "notes": [],
         "user_must_do": [

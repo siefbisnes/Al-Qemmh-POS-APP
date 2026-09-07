@@ -1,9 +1,6 @@
 import os
-<<<<<<< HEAD
-=======
 from datetime import datetime
 from zoneinfo import ZoneInfo
->>>>>>> 9ad7f88 (Initial commit)
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app, send_from_directory
 
@@ -12,8 +9,6 @@ from app.services import sales as sales_service
 
 bp = Blueprint("orders", __name__, url_prefix="/orders")
 
-<<<<<<< HEAD
-=======
 _CAIRO_TZ = ZoneInfo("Africa/Cairo")
 
 
@@ -45,7 +40,6 @@ def format_local_datetime(value, fmt="%d/%m/%Y %I:%M {ampm}"):
     result = parsed.strftime(fmt.replace("{ampm}", "PLACEHOLDER_AMPM"))
     return result.replace("PLACEHOLDER_AMPM", ampm)
 
->>>>>>> 9ad7f88 (Initial commit)
 
 @bp.route("/")
 def index():

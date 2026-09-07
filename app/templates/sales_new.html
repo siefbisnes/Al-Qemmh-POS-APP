@@ -45,12 +45,6 @@
         <label>شركة الشحن</label>
         <select name="delivery_provider" id="deliveryProviderSelect">
           <option value="">اختر شركة الشحن…</option>
-<<<<<<< HEAD
-          {% for p in delivery_providers %}
-            <option value="{{ p.slug }}">{{ p.name }}</option>
-          {% endfor %}
-        </select>
-=======
           {% for p in delivery_providers if p.name != 'رايموند' %}
             <option value="{{ p.slug }}">{{ p.name }}</option>
           {% endfor %}
@@ -58,7 +52,6 @@
         </select>
         <input type="text" name="delivery_provider" id="deliveryProviderCustomInput"
                placeholder="اكتب اسم شركة الشحن" style="display:none; margin-top:.5rem;" disabled>
->>>>>>> 9ad7f88 (Initial commit)
       </div>
       <div class="field">
         <label>قيمة شحن الاوردر (ج.م)</label>
@@ -392,8 +385,6 @@
   const deliveryOrderCheckbox = document.getElementById("deliveryOrderCheckbox");
   const deliveryOrderRow = document.getElementById("deliveryOrderRow");
   const normalPaymentSection = document.getElementById("normalPaymentSection");
-<<<<<<< HEAD
-=======
 
   // "أخرى" (custom shipping company) toggle: only one of the two
   // delivery_provider-named fields is ever enabled at a time, so the
@@ -413,7 +404,6 @@
       }
     });
   }
->>>>>>> 9ad7f88 (Initial commit)
   deliveryOrderCheckbox.addEventListener("change", (e) => {
     const isDelivery = e.target.checked;
     deliveryOrderRow.style.display = isDelivery ? "block" : "none";

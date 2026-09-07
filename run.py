@@ -1432,8 +1432,6 @@ class ServerController:
         # app) can poll for it over HTTP instead, since evaluate_js only
         # reaches the native window and has no effect on a separate browser.
         self.app.config["SERVER_CONTROLLER"] = self
-<<<<<<< HEAD
-=======
 
         # Dev convenience only: normal (packaged/production) runs use
         # debug=False everywhere, which makes Jinja compile each
@@ -1449,7 +1447,6 @@ class ServerController:
             self.app.config["TEMPLATES_AUTO_RELOAD"] = True
             self.app.jinja_env.auto_reload = True
 
->>>>>>> 9ad7f88 (Initial commit)
         return self.app
 
     def start(self, log_callback=None):
@@ -1904,10 +1901,6 @@ class AppAPI:
         becomes the visible tab / when it's left, to stop several
         physical key combos from triggering their normal OS/shell
         action mid-test instead of just registering as a detected key:
-<<<<<<< HEAD
-        the Windows key (Start menu), PrintScreen (screenshot to
-        clipboard), Alt+F4 (close window), and Alt+Tab (task switch).
-=======
         the Windows key alone (Start menu), any Win+<key> combo (e.g.
         Win+D/E/R/L - desktop/explorer/run/lock), PrintScreen
         (screenshot to clipboard), Alt+F4 (close window), Alt+Tab
@@ -1915,22 +1908,17 @@ class AppAPI:
         have (mail/calculator/browser/media keys - this is also where
         a dedicated OneDrive key on some laptops lives, since it's
         wired the same way as those rather than a Win+letter combo).
->>>>>>> 9ad7f88 (Initial commit)
 
         All of these are intercepted by Windows before any web page -
         or even most native app windows - ever sees the keydown, so no
         amount of JS preventDefault() can stop them; it needs a
         low-level keyboard hook (WH_KEYBOARD_LL) that swallows them
-<<<<<<< HEAD
-        before the shell/window manager does. Windows-only; a no-op
-=======
         before the shell/window manager does. This does NOT stop the
         diagnostics page from registering the swallowed keys visually:
         pywebview's Chromium/WebView2 engine reads keyboard state via
         raw input, a separate pipe from the WM_KEYDOWN chain this hook
         filters, so the on-screen key still lights up even though the
         OS-level shortcut never fires. Windows-only; a no-op
->>>>>>> 9ad7f88 (Initial commit)
         elsewhere.
 
         Note: Ctrl+Alt+Delete is the one combo that genuinely can't be
@@ -1962,19 +1950,6 @@ class AppAPI:
             VK_SNAPSHOT = 0x2C  # PrintScreen
             VK_TAB = 0x09
             VK_F4 = 0x73
-<<<<<<< HEAD
-            HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
-
-            def _hook_proc(n_code, w_param, l_param):
-                if n_code == 0 and w_param in (WM_KEYDOWN, WM_SYSKEYDOWN):
-                    kb = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-                    vk_code = kb.vkCode
-                    alt_down = bool(kb.flags & LLKHF_ALTDOWN)
-                    if vk_code in (VK_LWIN, VK_RWIN, VK_SNAPSHOT):
-                        return 1  # swallow - Start menu / screenshot never triggers
-                    if alt_down and vk_code in (VK_F4, VK_TAB):
-                        return 1  # swallow - window doesn't close, no task switch
-=======
             # OEM "launch app"/media row - covers a dedicated OneDrive
             # key on keyboards that have one, plus mail/calculator/
             # browser-home/media-control keys some boards also carry.
@@ -2010,7 +1985,6 @@ class AppAPI:
                             return 1  # swallow OEM launch/media keys (incl. OneDrive)
                         if alt_down and vk_code in (VK_F4, VK_TAB):
                             return 1  # swallow - window doesn't close, no task switch
->>>>>>> 9ad7f88 (Initial commit)
                 return ctypes.windll.user32.CallNextHookEx(None, n_code, w_param, l_param)
 
             # Keep a reference to the ctypes callback on self - if it

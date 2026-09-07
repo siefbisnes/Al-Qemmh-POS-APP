@@ -25,15 +25,9 @@
       <table class="data-table spec-table">
         <tr><td>الكمية المباعة</td><td>{{ sale.quantity }}</td></tr>
         <tr><td>سعر البيع</td><td>{{ sale.selling_price|money }}</td></tr>
-<<<<<<< HEAD
-        <tr><td>تاريخ البيع</td><td>{{ sale.sale_date[:16] }}</td></tr>
-        {% if sale.warranty %}
-          <tr><td>الضمان حتى</td><td>{{ sale.warranty.expiration_date[:10] }}</td></tr>
-=======
         <tr><td>تاريخ البيع</td><td>{{ sale.sale_date|localdt }}</td></tr>
         {% if sale.warranty %}
           <tr><td>الضمان حتى</td><td>{{ sale.warranty.expiration_date|localdt('%d/%m/%Y') }}</td></tr>
->>>>>>> 9ad7f88 (Initial commit)
         {% endif %}
         {% for s in sale.specifications %}
           <tr><td>{{ s.field_label }}</td><td>{{ s.value }}</td></tr>
@@ -76,11 +70,7 @@
           <tr><th>التاريخ</th><th>المنتج</th><th>الكمية</th><th>السعر</th></tr>
           {% for h in sale.history %}
             <tr>
-<<<<<<< HEAD
-              <td>{{ h.sale_date[:10] }}</td>
-=======
               <td>{{ h.sale_date|localdt('%d/%m/%Y') }}</td>
->>>>>>> 9ad7f88 (Initial commit)
               <td><a href="{{ url_for('sales.detail', sale_id=h.id) }}">{{ h.product_name }}</a></td>
               <td>{{ h.quantity }}</td>
               <td>{{ h.selling_price|money }}</td>

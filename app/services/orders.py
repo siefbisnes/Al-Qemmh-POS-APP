@@ -15,10 +15,6 @@ data, it only tracks delivery-specific state and, at the very end,
 writes a normal sale_payments row via the existing payment system so
 paid-money reporting doesn't need a second code path.
 """
-<<<<<<< HEAD
-=======
-
->>>>>>> 9ad7f88 (Initial commit)
 from datetime import datetime
 
 from app.db import db_cursor
@@ -49,23 +45,11 @@ def _money(value):
 
 # ---------- providers ----------
 
-<<<<<<< HEAD
 def list_providers():
     with db_cursor() as cur:
         return [dict(r) for r in cur.execute(
             "SELECT * FROM delivery_providers ORDER BY sort_order, name"
         ).fetchall()]
-=======
-
-def list_providers():
-    with db_cursor() as cur:
-        return [
-            dict(r)
-            for r in cur.execute(
-                "SELECT * FROM delivery_providers ORDER BY sort_order, name"
-            ).fetchall()
-        ]
->>>>>>> 9ad7f88 (Initial commit)
 
 
 def add_provider(name):
@@ -84,14 +68,7 @@ def add_provider(name):
 
 # ---------- creation (called from the checkout route) ----------
 
-<<<<<<< HEAD
 def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost_source):
-=======
-
-def create_order(
-    transaction_id, delivery_provider, shipping_cost, shipping_cost_source
-):
->>>>>>> 9ad7f88 (Initial commit)
     """Called right after sales_service.create_transaction() when the
     cashier checked طلب توصيل.
 
@@ -158,15 +135,7 @@ def create_order(
 
             cur.execute(
                 "INSERT INTO purchases (name, cost, payment_method) VALUES (?, ?, ?)",
-<<<<<<< HEAD
                 (f"تحويل مقابل شحن اوردر — {delivery_provider}", -shipping_cost, offset_method),
-=======
-                (
-                    f"تحويل مقابل شحن اوردر — {delivery_provider}",
-                    -shipping_cost,
-                    offset_method,
-                ),
->>>>>>> 9ad7f88 (Initial commit)
             )
             shipping_offset_purchase_id = cur.lastrowid
 
@@ -176,21 +145,9 @@ def create_order(
                 shipping_cost, shipping_cost_source, shipping_purchase_id,
                 shipping_offset_purchase_id)
                VALUES (?, ?, 'preparing', ?, ?, ?, ?, ?)""",
-<<<<<<< HEAD
             (transaction_id, delivery_provider, order_amount,
              shipping_cost, shipping_cost_source, shipping_purchase_id,
              shipping_offset_purchase_id),
-=======
-            (
-                transaction_id,
-                delivery_provider,
-                order_amount,
-                shipping_cost,
-                shipping_cost_source,
-                shipping_purchase_id,
-                shipping_offset_purchase_id,
-            ),
->>>>>>> 9ad7f88 (Initial commit)
         )
         order_id = cur.lastrowid
         cur.execute(
@@ -202,10 +159,6 @@ def create_order(
 
 # ---------- reads ----------
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 9ad7f88 (Initial commit)
 def _attach_transaction(order):
     txn = sales_service.get_transaction(order["transaction_id"])
     order["transaction"] = txn
@@ -224,15 +177,7 @@ def set_tracking_number(order_id, tracking_number):
     with db_cursor(commit=True) as cur:
         cur.execute(
             "UPDATE orders SET tracking_number = ?, updated_at = ? WHERE id = ?",
-<<<<<<< HEAD
             (tracking_number, datetime.utcnow().isoformat(timespec="seconds"), order_id),
-=======
-            (
-                tracking_number,
-                datetime.utcnow().isoformat(timespec="seconds"),
-                order_id,
-            ),
->>>>>>> 9ad7f88 (Initial commit)
         )
 
 
@@ -246,13 +191,7 @@ def get_order(order_id):
 
 def get_order_by_transaction(transaction_id):
     with db_cursor() as cur:
-<<<<<<< HEAD
         row = cur.execute("SELECT * FROM orders WHERE transaction_id = ?", (transaction_id,)).fetchone()
-=======
-        row = cur.execute(
-            "SELECT * FROM orders WHERE transaction_id = ?", (transaction_id,)
-        ).fetchone()
->>>>>>> 9ad7f88 (Initial commit)
     return dict(row) if row else None
 
 
@@ -275,14 +214,7 @@ def list_orders(search=None):
 
     for row in rows:
         row["receipt_number"] = sales_service.receipt_number(
-<<<<<<< HEAD
             row["transaction_id"], row["transaction_created_at"], stored=row.get("transaction_receipt_number")
-        )
-        row["status_label"] = STATUS_LABELS_AR.get(row["status"], row["status"])
-=======
-            row["transaction_id"],
-            row["transaction_created_at"],
-            stored=row.get("transaction_receipt_number"),
         )
         row["status_label"] = STATUS_LABELS_AR.get(row["status"], row["status"])
         # Order list only (spec follow-up): once a وصل order has actually
@@ -293,18 +225,12 @@ def list_orders(search=None):
         # advance_status()) needs to change.
         if row["status"] == "delivered" and row.get("financially_completed_at"):
             row["status_label"] = "تم التحصيل"
->>>>>>> 9ad7f88 (Initial commit)
 
     if search:
         q = search.strip().lower()
         if q:
             rows = [
-<<<<<<< HEAD
                 r for r in rows
-=======
-                r
-                for r in rows
->>>>>>> 9ad7f88 (Initial commit)
                 if q in (r["customer_name"] or "").lower()
                 or q in (r["customer_phone"] or "").lower()
                 or q in r["receipt_number"].lower()
@@ -340,10 +266,6 @@ def pending_order_sql_exclusion(sales_alias="s"):
 
 # ---------- status transitions ----------
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 9ad7f88 (Initial commit)
 def advance_status(order_id, new_status):
     """Enforces the linear progression تجهيز → شحن → وصل - no skipping.
     وصل itself doesn't financially complete the order; that happens
@@ -406,14 +328,7 @@ def _set_status(order_id, from_status, to_status):
 
 # ---------- financial completion (وصل + payment confirmation) ----------
 
-<<<<<<< HEAD
 def confirm_payment(order_id, payment_method, transfer_image_path=None, payment_amount=None):
-=======
-
-def confirm_payment(
-    order_id, payment_method, transfer_image_path=None, payment_amount=None
-):
->>>>>>> 9ad7f88 (Initial commit)
     """Only allowed once status == 'delivered'. Writes a normal
     sale_payments row for the order's transaction (reusing the existing
     payment system) and stamps financially_completed_at, which is what
@@ -469,10 +384,6 @@ def confirm_payment(
 
 # ---------- Quick View: order age (§9) ----------
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 9ad7f88 (Initial commit)
 def order_age_display(order):
     """'الايام من تكوين هذه الاوردر' — elapsed time from order creation
     until now, but frozen at delivered_at once the order has reached
@@ -528,10 +439,6 @@ def order_age_display(order):
 # exist), so a deleted delivery order truly leaves no trace in the
 # drawer/online totals (§20).
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 9ad7f88 (Initial commit)
 def cleanup_before_transaction_delete(transaction_id):
     order = get_order_by_transaction(transaction_id)
     if not order:

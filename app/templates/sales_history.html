@@ -38,11 +38,7 @@
           <span class="badge badge-sale">بيع عادي</span>
         {% endif %}
       </td>
-<<<<<<< HEAD
-      <td data-label="التاريخ والوقت">{{ t.created_at[:16] }}</td>
-=======
       <td data-label="التاريخ والوقت">{{ t.created_at|localdt }}</td>
->>>>>>> 9ad7f88 (Initial commit)
       <td data-label="الإجمالي">{{ t.total_amount|money }}</td>
       <td data-label="المدفوع">{{ t.paid_amount|money }}</td>
       <td data-label="المتبقي">

@@ -11,15 +11,9 @@
 
 <form method="post" class="panel">
   <div class="toggle-pill-group">
-<<<<<<< HEAD
-    <input type="radio" id="entry_type_purchase" name="entry_type" value="purchase" checked>
-    <label for="entry_type_purchase">مشتريات</label>
-    <input type="radio" id="entry_type_expense" name="entry_type" value="expense">
-=======
     <input type="radio" id="entry_type_purchase" name="entry_type" value="purchase" required>
     <label for="entry_type_purchase">مشتريات</label>
     <input type="radio" id="entry_type_expense" name="entry_type" value="expense" required>
->>>>>>> 9ad7f88 (Initial commit)
     <label for="entry_type_expense">مصروفات</label>
   </div>
 
@@ -70,11 +64,7 @@
   <tr><th>التاريخ</th><th>النوع</th><th>الوصف</th><th>المبلغ</th><th>طريقة الدفع</th><th></th></tr>
   {% for r in visible_records %}
     <tr>
-<<<<<<< HEAD
-      <td>{{ r.date[:16] if r.date else '-' }}</td>
-=======
       <td>{{ r.date|localdt if r.date else '-' }}</td>
->>>>>>> 9ad7f88 (Initial commit)
       <td>{{ r.label }}</td>
       <td>{{ r.description }}</td>
       <td>{{ r.amount|money }}</td>
