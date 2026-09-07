@@ -120,11 +120,19 @@
   .diag-mouse-btn {
     flex:1 1 90px; min-width:80px; padding:1rem .5rem; text-align:center; border-radius:var(--radius-sm);
     border:2px solid var(--border); background:var(--bg); font-weight:600; font-size:.82rem; color:var(--text-muted);
+<<<<<<< HEAD
     transition:background .1s, border-color .1s, color .1s;
   }
   .diag-mouse-btn.is-active { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:var(--shadow-card); }
   .diag-mouse-btn.was-clicked { border-color:var(--accent); color:var(--accent); }
   .diag-mouse-btn.is-longpress { background:#000; border-color:#000; color:#fff; }
+=======
+    transition:background .05s, border-color .05s, color .05s;
+  }
+  .diag-mouse-btn.is-active { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:var(--shadow-card); }
+  .diag-mouse-btn.was-clicked { border-color:var(--accent); color:var(--accent); }
+  .diag-mouse-btn.is-longpress { background:#000 !important; border-color:#000 !important; color:#fff !important; box-shadow:none !important; }
+>>>>>>> 9ad7f88 (Initial commit)
 
   /* The entire box is the hit-target (not a tiny button) - it just
      needs to be focusable/clickable and cover the visible area; all
@@ -166,7 +174,12 @@
     transition:background .06s, color .06s, border-color .06s;
   }
   .diag-key.is-empty { border:none; background:transparent; }
+<<<<<<< HEAD
   .diag-key.is-active { background:var(--accent); color:#fff; border-color:var(--accent); }
+=======
+  .diag-key.is-active { background:#000; color:#fff; border-color:#000; }
+  .diag-key.is-passed { background:#16a34a; color:#fff; border-color:#16a34a; }
+>>>>>>> 9ad7f88 (Initial commit)
   .diag-key.is-stuck { background:var(--danger); color:#fff; border-color:var(--danger); }
   .diag-key .sub { display:block; font-size:.6rem; opacity:.75; }
 
@@ -234,7 +247,11 @@
       // the user navigates away, so nothing looks stuck when they
       // come back.
       if (tab.dataset.target !== "diagKeyboard") {
+<<<<<<< HEAD
         Object.values(keyElements || {}).forEach(function (el) { el.classList.remove("is-active", "is-stuck"); });
+=======
+        Object.values(keyElements || {}).forEach(function (el) { el.classList.remove("is-active", "is-stuck", "is-passed"); });
+>>>>>>> 9ad7f88 (Initial commit)
         keyHeldSince = {};
       }
     });
@@ -262,12 +279,19 @@
   var mouseButtons = { 0: "mBtnLeft", 1: "mBtnMiddle", 2: "mBtnRight" };
   var mouseFlashClass = { 0: "flash-left", 1: "flash-middle", 2: "flash-right" };
   var mouseHeldSince = {};
+<<<<<<< HEAD
   var STUCK_THRESHOLD_MS = 4000;
   // A quick click should never show the black long-press state at
   // all - only a hold longer than this does.
   var LONG_PRESS_MS = 600;
   var longPressTimers = {};
   var longPressActive = {};
+=======
+  // Bumped up from 4s so a deliberate held-down test (now shown as
+  // black the whole time it's held) doesn't trip the "stuck" warning
+  // just from someone holding it on purpose for a few seconds.
+  var STUCK_THRESHOLD_MS = 6000;
+>>>>>>> 9ad7f88 (Initial commit)
   var mouseZone = document.getElementById("mouseTestZone");
 
   function updateMouseButtonUI(button, isDown) {
@@ -275,6 +299,7 @@
     if (!id) return;
     var el = document.getElementById(id);
     if (isDown) {
+<<<<<<< HEAD
       el.classList.add("is-active", "was-clicked");
       mouseHeldSince[button] = Date.now();
       longPressTimers[button] = setTimeout(function () {
@@ -300,6 +325,20 @@
         // Ordinary short click - never shows the black state at all.
         el.classList.remove("is-active");
       }
+=======
+      // Black for as long as the button is physically held - no delay,
+      // no threshold.
+      el.classList.add("is-longpress", "was-clicked");
+      mouseHeldSince[button] = Date.now();
+    } else {
+      delete mouseHeldSince[button];
+      document.getElementById("mStuckWarning").style.display = "none";
+      // On release: drop black, flash blue briefly, then settle into
+      // the normal "was clicked" outline.
+      el.classList.remove("is-longpress");
+      el.classList.add("is-active");
+      setTimeout(function () { el.classList.remove("is-active"); }, 200);
+>>>>>>> 9ad7f88 (Initial commit)
     }
   }
 
@@ -343,9 +382,12 @@
   }, 500);
 
   function resetMouse() {
+<<<<<<< HEAD
     Object.keys(longPressTimers).forEach(function (btn) { clearTimeout(longPressTimers[btn]); });
     longPressTimers = {};
     longPressActive = {};
+=======
+>>>>>>> 9ad7f88 (Initial commit)
     Object.values(mouseButtons).forEach(function (id) {
       document.getElementById(id).classList.remove("is-active", "was-clicked", "is-longpress");
     });
@@ -439,7 +481,11 @@
   var keyPressTimestamps = [];
 
   function resetKeyboard() {
+<<<<<<< HEAD
     Object.values(keyElements).forEach(function (el) { el.classList.remove("is-active", "is-stuck"); });
+=======
+    Object.values(keyElements).forEach(function (el) { el.classList.remove("is-active", "is-stuck", "is-passed"); });
+>>>>>>> 9ad7f88 (Initial commit)
     keyHeldSince = {};
     keyPressTimestamps = [];
     document.getElementById("kKps").textContent = "0";
@@ -493,7 +539,11 @@
     }
 
     var el = keyElements[e.code];
+<<<<<<< HEAD
     if (el) el.classList.add("is-active"); // stays highlighted - never removed on keyup
+=======
+    if (el) { el.classList.remove("is-passed"); el.classList.add("is-active"); } // black while held
+>>>>>>> 9ad7f88 (Initial commit)
     if (!keyHeldSince[e.code]) keyHeldSince[e.code] = Date.now();
 
     document.getElementById("kEventKey").textContent = e.key;
@@ -518,12 +568,22 @@
   document.addEventListener("keyup", function (e) {
     if (!isKeyboardPanelActive()) return;
     if (SUPPRESS_DEFAULT_CODES[e.code]) e.stopPropagation();
+<<<<<<< HEAD
     // Intentionally does NOT remove "is-active" - the key stays
     // highlighted so the technician can see it was detected, even
     // after release. Only "currently held" bookkeeping (for the stuck
     // check) and the transient stuck-red state clear on release.
     var el = keyElements[e.code];
     if (el) el.classList.remove("is-stuck");
+=======
+    // On release, swap from the "held" (black) state to the "tested/
+    // passed" (green) state - it stays green so the technician can see
+    // it was detected, even after release. Only "currently held"
+    // bookkeeping (for the stuck check) and the transient stuck-red
+    // state clear on release.
+    var el = keyElements[e.code];
+    if (el) { el.classList.remove("is-stuck", "is-active"); el.classList.add("is-passed"); }
+>>>>>>> 9ad7f88 (Initial commit)
     delete keyHeldSince[e.code];
   }, true);
 

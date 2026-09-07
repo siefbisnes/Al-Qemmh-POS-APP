@@ -5,3 +5,7 @@ __pycache__/
 instance/
 *.log
 .env
+<<<<<<< HEAD
+=======
+.Mygit/
+>>>>>>> 9ad7f88 (Initial commit)

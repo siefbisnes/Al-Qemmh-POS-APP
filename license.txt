@@ -8,4 +8,8 @@ approval from Sief's Production.
 
 For approval or inquiries, contact: 01020889951
 
+<<<<<<< HEAD
 By clicking "I accept the agreement" below, you agree to these terms.
+=======
+By clicking "I accept the agreement" below, you agree to these terms.s
+>>>>>>> 9ad7f88 (Initial commit)

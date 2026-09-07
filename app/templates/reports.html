@@ -37,10 +37,19 @@
     </div>
     <div class="field">
       <label>النوع</label>
+<<<<<<< HEAD
       <select name="kind">
         <option value="add">إضافة</option>
         <option value="remove">خصم</option>
       </select>
+=======
+      <div class="toggle-pill-group">
+        <input type="radio" id="adjust_kind_add" name="kind" value="add" required>
+        <label for="adjust_kind_add">إضافة</label>
+        <input type="radio" id="adjust_kind_remove" name="kind" value="remove" required>
+        <label for="adjust_kind_remove">خصم</label>
+      </div>
+>>>>>>> 9ad7f88 (Initial commit)
     </div>
     <div class="field">
       <label>المبلغ</label>
@@ -57,7 +66,11 @@
 </div>
 
 {% if reset_at and not date_from %}
+<<<<<<< HEAD
 <p class="hint">عرض الإجماليات منذ آخر إعادة ضبط ({{ reset_at[:16] }}).</p>
+=======
+<p class="hint">عرض الإجماليات منذ آخر إعادة ضبط ({{ reset_at|localdt }}).</p>
+>>>>>>> 9ad7f88 (Initial commit)
 {% endif %}
 
 <div class="stat-grid" dir="rtl">
@@ -164,7 +177,11 @@
   <tr><th>التاريخ والوقت</th><th>النوع</th><th>التفاصيل</th><th>الصادر</th><th>الوارد</th><th>إجراءات</th></tr>
   {% for e in ledger_entries if e.type != 'purchase' or show_purchase_price %}
   <tr>
+<<<<<<< HEAD
     <td>{{ e.date[:16] }}</td>
+=======
+    <td>{{ e.date|localdt }}</td>
+>>>>>>> 9ad7f88 (Initial commit)
     <td>
       {% if e.type == 'sale' %}<span class="badge badge-grade-a">بيع</span>
       {% elif e.type == 'purchase' %}<span class="badge badge-grade-c">مشتريات</span>

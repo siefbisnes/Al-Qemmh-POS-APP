@@ -30,7 +30,12 @@
       <td data-label="رقم البوصلة">{{ o.tracking_number or '—' }}</td>
       <td data-label="الإجمالي">{{ o.order_amount|money }}</td>
       <td data-label="الحالة">
+<<<<<<< HEAD
         <a href="{{ url_for('orders.detail', order_id=o.id) }}" class="order-status-pill order-status-{{ o.status }}">
+=======
+        <a href="{{ url_for('orders.detail', order_id=o.id) }}"
+           class="order-status-pill order-status-{{ o.status }}{{ ' is-collected' if o.financially_completed_at else '' }}">
+>>>>>>> 9ad7f88 (Initial commit)
           {{ o.status_label }}
         </a>
       </td>

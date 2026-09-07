@@ -1,4 +1,9 @@
 import os
+<<<<<<< HEAD
+=======
+from datetime import datetime
+from zoneinfo import ZoneInfo
+>>>>>>> 9ad7f88 (Initial commit)
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app, send_from_directory
 
@@ -7,6 +12,40 @@ from app.services import sales as sales_service
 
 bp = Blueprint("orders", __name__, url_prefix="/orders")
 
+<<<<<<< HEAD
+=======
+_CAIRO_TZ = ZoneInfo("Africa/Cairo")
+
+
+@bp.app_template_filter("localdt")
+def format_local_datetime(value, fmt="%d/%m/%Y %I:%M {ampm}"):
+    """Converts a stored UTC-naive 'YYYY-MM-DD HH:MM:SS' (or ISO,
+    'T'-separated) timestamp to Egypt local time and formats it as
+    day/month/year + 12-hour time with Arabic ص/م, replacing the raw
+    UTC string previously shown across the app's logs/tables.
+    Registered here via app_template_filter so it's available to every
+    template, not just this blueprint's. Falls back to the raw value
+    if it can't be parsed (e.g. already-short date-only strings, None,
+    etc.). Pass a custom fmt (e.g. '%d/%m/%Y' for date-only) to skip
+    the time entirely - the {ampm} placeholder is only substituted
+    when present in fmt."""
+    if not value:
+        return value
+    text = str(value).strip().replace("T", " ")
+    for candidate_fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(text[:19], candidate_fmt)
+            break
+        except ValueError:
+            parsed = None
+    if parsed is None:
+        return value
+    parsed = parsed.replace(tzinfo=ZoneInfo("UTC")).astimezone(_CAIRO_TZ)
+    ampm = "ص" if parsed.hour < 12 else "م"
+    result = parsed.strftime(fmt.replace("{ampm}", "PLACEHOLDER_AMPM"))
+    return result.replace("PLACEHOLDER_AMPM", ampm)
+
+>>>>>>> 9ad7f88 (Initial commit)
 
 @bp.route("/")
 def index():

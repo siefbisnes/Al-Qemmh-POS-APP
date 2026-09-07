@@ -45,10 +45,20 @@
         <label>شركة الشحن</label>
         <select name="delivery_provider" id="deliveryProviderSelect">
           <option value="">اختر شركة الشحن…</option>
+<<<<<<< HEAD
           {% for p in delivery_providers %}
             <option value="{{ p.slug }}">{{ p.name }}</option>
           {% endfor %}
         </select>
+=======
+          {% for p in delivery_providers if p.name != 'رايموند' %}
+            <option value="{{ p.slug }}">{{ p.name }}</option>
+          {% endfor %}
+          <option value="__custom__">أخرى (كتابة اسم الشركة)</option>
+        </select>
+        <input type="text" name="delivery_provider" id="deliveryProviderCustomInput"
+               placeholder="اكتب اسم شركة الشحن" style="display:none; margin-top:.5rem;" disabled>
+>>>>>>> 9ad7f88 (Initial commit)
       </div>
       <div class="field">
         <label>قيمة شحن الاوردر (ج.م)</label>
@@ -382,6 +392,28 @@
   const deliveryOrderCheckbox = document.getElementById("deliveryOrderCheckbox");
   const deliveryOrderRow = document.getElementById("deliveryOrderRow");
   const normalPaymentSection = document.getElementById("normalPaymentSection");
+<<<<<<< HEAD
+=======
+
+  // "أخرى" (custom shipping company) toggle: only one of the two
+  // delivery_provider-named fields is ever enabled at a time, so the
+  // backend always receives exactly one value under that field name -
+  // either the picked slug or the freely typed company name.
+  const deliveryProviderSelect = document.getElementById("deliveryProviderSelect");
+  const deliveryProviderCustomInput = document.getElementById("deliveryProviderCustomInput");
+  if (deliveryProviderSelect && deliveryProviderCustomInput) {
+    deliveryProviderSelect.addEventListener("change", () => {
+      const isCustom = deliveryProviderSelect.value === "__custom__";
+      deliveryProviderCustomInput.style.display = isCustom ? "block" : "none";
+      deliveryProviderCustomInput.disabled = !isCustom;
+      deliveryProviderSelect.name = isCustom ? "" : "delivery_provider";
+      if (isCustom) {
+        deliveryProviderCustomInput.value = "";
+        deliveryProviderCustomInput.focus();
+      }
+    });
+  }
+>>>>>>> 9ad7f88 (Initial commit)
   deliveryOrderCheckbox.addEventListener("change", (e) => {
     const isDelivery = e.target.checked;
     deliveryOrderRow.style.display = isDelivery ? "block" : "none";
