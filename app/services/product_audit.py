@@ -35,7 +35,17 @@ EVENT_LABELS_AR = {
     "price_purchase": "تغيير سعر الشراء",
     "name_changed": "تغيير اسم المنتج",
     "specs_changed": "تعديل مواصفات المنتج",
+    "sale_return": "ارجاع",
+    "order_deleted": "حذف اوردر",
+    "expense_deleted": "حذف مصروف",
+    "purchase_deleted": "حذف مشتريات",
 }
+
+# Event types that aren't really "about" a product row (product_id is
+# always None for these) - the audit log page uses this to avoid
+# labelling them "(محذوف)" the way it does for a genuinely deleted
+# product, since that would be misleading here.
+NON_PRODUCT_EVENT_TYPES = {"order_deleted", "expense_deleted", "purchase_deleted"}
 
 
 def _current_username():

@@ -67,6 +67,14 @@
         </span>
         <span>الاعدادات</span>
       </a>
+      {% if is_admin %}
+      <a href="{{ url_for('products.audit_log') }}" class="task-tile">
+        <span class="task-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 4h9a2 2 0 012 2v13a1 1 0 01-1.45.9L15 18.2l-3.55 1.7A1 1 0 0110 19V6a2 2 0 00-2-2z"/><path d="M9 4H6a2 2 0 00-2 2v14l3-1.5" /><path d="M9 8h5M9 11h5" /></svg>
+        </span>
+        <span>سجل التغييرات</span>
+      </a>
+      {% endif %}
     </div>
   </section>
 </div>

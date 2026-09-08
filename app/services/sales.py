@@ -308,7 +308,7 @@ def void_sale(sale_id):
             if product_row:
                 txn_id = sale["transaction_id"]
                 product_audit.log_event(
-                    sale["product_id"], product_row["name"], "quantity_manual",
+                    sale["product_id"], product_row["name"], "sale_return",
                     quantity_before=product_row["quantity"], quantity_after=product_row["quantity"] + sale["quantity"],
                     new_value=str(sale["quantity"]),
                     reference=str(txn_id) if txn_id else None,
@@ -316,6 +316,17 @@ def void_sale(sale_id):
                     note="إلغاء بيع (void) — إرجاع الكمية للمخزون", cur=cur,
                 )
                 product_audit.record_expected_returns_snapshot(cur=cur)
+        else:
+            # Service lines never touched stock, but a return/void of one
+            # should still show up in the change log as an "ارجاع" event.
+            txn_id = sale["transaction_id"]
+            product_audit.log_event(
+                None, sale["service_description"], "sale_return",
+                new_value=str(sale["quantity"]),
+                reference=str(txn_id) if txn_id else None,
+                reference_type="transaction" if txn_id else None,
+                note="إلغاء بيع خدمة (void)", cur=cur,
+            )
         cur.execute("DELETE FROM warranties WHERE sale_id = ?", (sale_id,))
         cur.execute(
             "UPDATE sales SET is_voided = 1, voided_at = ? WHERE id = ?",

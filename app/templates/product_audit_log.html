@@ -38,6 +38,10 @@
           <span class="badge badge-grade-a">{{ event_labels.get(e.event_type, e.event_type) }}</span>
         {% elif e.event_type == 'quantity_damaged' %}
           <span class="badge badge-grade-c">{{ event_labels.get(e.event_type, e.event_type) }}</span>
+        {% elif e.event_type == 'sale_return' %}
+          <span class="badge badge-grade-b">{{ event_labels.get(e.event_type, e.event_type) }}</span>
+        {% elif e.event_type in ('order_deleted', 'expense_deleted', 'purchase_deleted') %}
+          <span class="badge badge-grade-c">{{ event_labels.get(e.event_type, e.event_type) }}</span>
         {% else %}
           <span class="badge badge-muted">{{ event_labels.get(e.event_type, e.event_type) }}</span>
         {% endif %}
@@ -50,24 +54,30 @@
             {{ e.product_name }}
           {% endif %}
         </strong>
-        {% if not e.product_id %}<span class="subtitle">(محذوف)</span>{% endif %}
+        {% if not e.product_id and e.event_type not in ('order_deleted', 'expense_deleted', 'purchase_deleted') %}<span class="subtitle">(محذوف)</span>{% endif %}
       </div>
       <span class="subtitle">{{ e.created_at[:16] }}{% if e.username %} — بواسطة: {{ e.username }}{% endif %}</span>
     </div>
 
     {# ---- quantity-shaped events: sale / manual / damaged ---- #}
-    {% if e.event_type in ('quantity_sale', 'quantity_manual', 'quantity_damaged') %}
+    {% if e.event_type in ('quantity_sale', 'quantity_manual', 'quantity_damaged', 'sale_return') %}
+      {% if e.quantity_before is not none or e.quantity_after is not none %}
       <p style="margin:0.2rem 0;">
         الكمية قبل العملية: <strong>{{ e.quantity_before if e.quantity_before is not none else '—' }}</strong>
         {% if e.event_type == 'quantity_sale' %}
           · الكمية المباعة: <strong>{{ e.new_value }}</strong>
         {% elif e.event_type == 'quantity_damaged' %}
           · الكمية الهالكة: <strong>{{ e.new_value }}</strong>
+        {% elif e.event_type == 'sale_return' %}
+          · الكمية المرتجعة: <strong>{{ e.new_value }}</strong>
         {% else %}
           · التغيير: <strong>{{ '%+d'|format(e.new_value|int) if e.new_value else '—' }}</strong>
         {% endif %}
         · الكمية بعد العملية: <strong>{{ e.quantity_after if e.quantity_after is not none else '—' }}</strong>
       </p>
+      {% elif e.event_type == 'sale_return' %}
+      <p style="margin:0.2rem 0;">الكمية المرتجعة (خدمة): <strong>{{ e.new_value }}</strong></p>
+      {% endif %}
       {% if e.reference_type == 'transaction' and e.reference %}
         <p style="margin:0.2rem 0;">
           <a href="{{ url_for('sales.transaction_detail', transaction_id=e.reference) }}">عرض الفاتورة</a>
@@ -80,6 +90,13 @@
       {% elif e.note %}
         <p class="subtitle" style="margin:0.2rem 0;">{{ e.note }}</p>
       {% endif %}
+
+    {# ---- deletion-only events: order/expense/purchase ---- #}
+    {% elif e.event_type in ('order_deleted', 'expense_deleted', 'purchase_deleted') %}
+      {% if e.old_value %}
+        <p style="margin:0.2rem 0;">القيمة: <strong>{{ '%.2f'|format(e.old_value|float) }} ج.م</strong></p>
+      {% endif %}
+      {% if e.note %}<p class="subtitle" style="margin:0.2rem 0;">{{ e.note }}</p>{% endif %}
 
     {# ---- price-shaped events ---- #}
     {% elif e.event_type in ('price_selling', 'price_purchase') %}

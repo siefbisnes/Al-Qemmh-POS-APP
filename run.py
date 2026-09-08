@@ -1924,6 +1924,23 @@ class AppAPI:
         Note: Ctrl+Alt+Delete is the one combo that genuinely can't be
         suppressed this way - it's a protected "secure attention
         sequence" enforced below any user-mode hook, by design.
+
+        BUG FIX (system keys not registering on-screen while suppressed):
+        returning 1 from a WH_KEYBOARD_LL hook swallows the message
+        completely, system-wide - it never reaches ANY window's message
+        queue, including this app's own. The previous version of this
+        docstring assumed WebView2/Chromium reads keyboard state via a
+        separate raw-input pipe unaffected by that, which is incorrect:
+        normal keyboard input to a WebView2 control is delivered through
+        the same WM_KEYDOWN/WM_KEYUP message chain this hook filters, so
+        a fully swallowed key was blocked from the shell (correct) but
+        also never lit up in the on-screen diagnostics test (the actual
+        bug). Fixed by still returning 1 (so the shell/Explorer never
+        sees it and no OS action fires), but first re-posting an
+        equivalent WM_KEYDOWN/WM_KEYUP straight to this app's own window
+        handle via _relay_key_to_window() - so the page's JS keydown/
+        keyup listeners still see the key normally, while nothing
+        outside this window's message loop ever does.
         """
         if sys.platform != "win32":
             return False
@@ -1943,8 +1960,11 @@ class AppAPI:
 
             WH_KEYBOARD_LL = 13
             WM_KEYDOWN = 0x0100
+            WM_KEYUP = 0x0101
             WM_SYSKEYDOWN = 0x0104
+            WM_SYSKEYUP = 0x0105
             LLKHF_ALTDOWN = 0x20
+            LLKHF_UP = 0x80
             VK_LWIN = 0x5B
             VK_RWIN = 0x5C
             VK_SNAPSHOT = 0x2C  # PrintScreen
@@ -1960,6 +1980,52 @@ class AppAPI:
             }
             HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
 
+            def _get_hwnd():
+                """Best-effort native window handle for the pywebview
+                window this hook belongs to, so a swallowed key can be
+                re-posted straight to it. Covers the EdgeChromium/WinForms
+                backend (pywebview's default on Windows), where
+                Window.native is a System.Windows.Forms control exposing
+                .Handle. Returns None (never raises) if pywebview's
+                internals don't match this on whatever version is
+                installed - the key is still suppressed either way, it
+                just won't visually register in that fallback case."""
+                try:
+                    return int(self._window.native.Handle.ToInt32())
+                except Exception:
+                    pass
+                try:
+                    return int(self._window.native.GetHandle())
+                except Exception:
+                    return None
+
+            def _relay_key_to_window(vk_code, is_keydown, is_syskey):
+                hwnd = _get_hwnd()
+                if not hwnd:
+                    return
+                scan_code = ctypes.windll.user32.MapVirtualKeyW(vk_code, 0)
+                # Right-side/extended keys (RWin, PrintScreen, the media/
+                # launch row) need lParam bit 24 set, or Chromium's
+                # scan-code-to-DOM-code table can resolve them to the
+                # wrong (non-extended) key.
+                extended = vk_code in (0x5C, 0x2C) or vk_code >= 0xA6  # VK_RWIN, VK_SNAPSHOT, OEM row
+                ext_bit = (1 << 24) if extended else 0
+                # Reconstruct a plausible lParam: bits 0-15 repeat count (1),
+                # 16-23 scan code, 24 extended-key flag, 30 "previous key
+                # state", 31 "transition state" (set only on key-up) - close
+                # enough for Chromium's message translation to derive the
+                # right key/code.
+                if is_keydown:
+                    lparam = 1 | (scan_code << 16) | ext_bit
+                else:
+                    lparam = 1 | (scan_code << 16) | ext_bit | (1 << 30) | (1 << 31)
+                msg = (WM_SYSKEYDOWN if is_syskey else WM_KEYDOWN) if is_keydown \
+                    else (WM_SYSKEYUP if is_syskey else WM_KEYUP)
+                try:
+                    ctypes.windll.user32.PostMessageW(hwnd, msg, vk_code, lparam)
+                except Exception:
+                    pass
+
             # Tracks whether a Windows key is currently physically held,
             # so a second key pressed while it's down (Win+D, Win+E,
             # Win+R, Win+L, ...) is swallowed too - not just the bare
@@ -1971,20 +2037,32 @@ class AppAPI:
                     kb = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
                     vk_code = kb.vkCode
                     is_keydown = w_param in (WM_KEYDOWN, WM_SYSKEYDOWN)
+                    is_syskey = w_param in (WM_SYSKEYDOWN, WM_SYSKEYUP)
                     is_win_key = vk_code in (VK_LWIN, VK_RWIN)
 
                     if is_win_key:
                         win_held["down"] = is_keydown
+                        _relay_key_to_window(vk_code, is_keydown, is_syskey)
                         return 1  # swallow the Windows key itself either way
 
                     if is_keydown:
                         alt_down = bool(kb.flags & LLKHF_ALTDOWN)
                         if win_held["down"]:
+                            _relay_key_to_window(vk_code, True, is_syskey)
                             return 1  # swallow Win+<anything> combos
                         if vk_code == VK_SNAPSHOT or vk_code in OEM_LAUNCH_VKS:
+                            _relay_key_to_window(vk_code, True, is_syskey)
                             return 1  # swallow OEM launch/media keys (incl. OneDrive)
                         if alt_down and vk_code in (VK_F4, VK_TAB):
+                            _relay_key_to_window(vk_code, True, is_syskey)
                             return 1  # swallow - window doesn't close, no task switch
+                    else:
+                        # PrintScreen (and the OEM row) commonly only fire a
+                        # KEYUP at all on Windows - relay that too, or the
+                        # on-screen key never lights up despite being caught.
+                        if vk_code == VK_SNAPSHOT or vk_code in OEM_LAUNCH_VKS:
+                            _relay_key_to_window(vk_code, False, is_syskey)
+                            return 1
                 return ctypes.windll.user32.CallNextHookEx(None, n_code, w_param, l_param)
 
             # Keep a reference to the ctypes callback on self - if it

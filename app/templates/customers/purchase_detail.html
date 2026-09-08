@@ -59,6 +59,7 @@
   {% endif %}
 </div>
 
+{% if purchase.remaining and purchase.remaining > 0.009 %}
 <div class="panel" dir="rtl">
   <h2>تسديد دين</h2>
   <p class="subtitle">اختر طريقة الدفع وأدخل المبلغ المطلوب سداده.</p>
@@ -80,5 +81,10 @@
     </div>
   </form>
 </div>
+{% else %}
+<div class="panel" dir="rtl">
+  <p class="empty-state" style="margin:0;">العميل هذه لا يملك ايه ديون حاليا</p>
+</div>
+{% endif %}
 
 {% endblock %}

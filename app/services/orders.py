@@ -19,6 +19,7 @@ from datetime import datetime
 
 from app.db import db_cursor
 from app.services import sales as sales_service
+from app.services import product_audit
 
 STATUS_FLOW = ["preparing", "shipping", "delivered"]
 TERMINAL_STATUSES = {"not_delivered", "cancelled"}
@@ -296,6 +297,41 @@ def advance_status(order_id, new_status):
             )
 
 
+def revert_to_shipping(order_id):
+    """Reverts وصل back to في الشحن (the shipping stage in STATUS_FLOW,
+    labelled 'في التوصيل' in the requested UI text) - the one backwards
+    transition this module allows, and only while it's still safe to:
+    the order must currently be 'delivered' AND its payment must NOT
+    have been confirmed yet (financially_completed_at is still NULL).
+    Once confirm_payment() has run, the order's revenue/COGS are already
+    recognized in Reports/Owner Dashboard and a real sale_payments row
+    exists - reverting the delivery status at that point would leave the
+    books showing a completed sale for an order that's supposedly back
+    "in transit", so it's blocked outright rather than trying to also
+    unwind the payment as a side effect of a status change.
+
+    Also clears delivered_at, since order_age_display()'s "days since
+    creation" counter is meant to keep counting again once the order is
+    no longer considered arrived."""
+    order = get_order(order_id)
+    if not order:
+        raise OrderError("الاوردر غير موجود.")
+    if order["status"] != "delivered":
+        raise OrderError("لا يمكن التراجع إلا من حالة وصل.")
+    if order.get("financially_completed_at"):
+        raise OrderError("تم تأكيد الدفع بالفعل لهذا الاوردر — لا يمكن التراجع عن حالة الوصول.")
+
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE orders SET status = 'shipping', delivered_at = NULL, updated_at = ? WHERE id = ?",
+            (datetime.utcnow().isoformat(timespec="seconds"), order_id),
+        )
+        cur.execute(
+            "INSERT INTO order_status_history (order_id, from_status, to_status) VALUES (?, 'delivered', 'shipping')",
+            (order_id,),
+        )
+
+
 def mark_not_delivered(order_id):
     order = get_order(order_id)
     if not order:
@@ -450,6 +486,19 @@ def cleanup_before_transaction_delete(transaction_id):
         # sale_payments and the orders/order_status_history rows themselves
         # cascade automatically via FK ON DELETE CASCADE once the caller
         # proceeds to delete the transaction/sale lines.
+
+        # Logged here (before the transaction/order rows are actually gone)
+        # since this is the one place both the order's details and its
+        # about-to-vanish transaction id are still available together.
+        # No reference/reference_type is set - the transaction is deleted
+        # right after this, so a "view receipt" link would just 404.
+        status_label = STATUS_LABELS_AR.get(order["status"], order["status"])
+        product_audit.log_event(
+            None, f"اوردر رقم {order['id']} — {order.get('delivery_provider') or '-'}",
+            "order_deleted",
+            note=f"حالة الاوردر عند الحذف: {status_label} — قيمة الاوردر: {order.get('order_amount')}",
+            cur=cur,
+        )
 
 
 def apply_return_shipping_bearer(transaction_id, shipping_cost_bearer):

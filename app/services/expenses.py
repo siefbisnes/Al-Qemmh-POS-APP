@@ -1,4 +1,5 @@
 from app.db import db_cursor
+from app.services import product_audit
 
 
 def list_expenses(date_from=None, date_to=None):
@@ -66,4 +67,12 @@ def add_expense(description, amount, expense_date=None, payment_method="cash"):
 
 def delete_expense(expense_id):
     with db_cursor(commit=True) as cur:
+        row = cur.execute("SELECT * FROM expenses WHERE id = ?", (expense_id,)).fetchone()
         cur.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+        if row:
+            product_audit.log_event(
+                None, row["description"], "expense_deleted",
+                old_value=row["amount"],
+                note=f"طريقة الدفع: {row['payment_method']} — تاريخ المصروف: {row['expense_date']}",
+                cur=cur,
+            )

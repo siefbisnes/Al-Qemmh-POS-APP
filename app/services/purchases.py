@@ -10,6 +10,7 @@ instead of introducing a second, inconsistent set of payment types.
 """
 from app.db import db_cursor
 from app.services.sales import PAYMENT_METHODS
+from app.services import product_audit
 
 _VALID_METHODS = {value for value, _ in PAYMENT_METHODS}
 
@@ -92,4 +93,12 @@ def purchases_by_method(date_from=None, date_to=None):
 
 def delete_purchase(purchase_id):
     with db_cursor(commit=True) as cur:
+        row = cur.execute("SELECT * FROM purchases WHERE id = ?", (purchase_id,)).fetchone()
         cur.execute("DELETE FROM purchases WHERE id = ?", (purchase_id,))
+        if row:
+            product_audit.log_event(
+                None, row["name"], "purchase_deleted",
+                old_value=row["cost"],
+                note=f"طريقة الدفع: {row['payment_method']} — تاريخ الشراء: {row['purchase_date']}",
+                cur=cur,
+            )

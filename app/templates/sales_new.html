@@ -2,209 +2,635 @@
 {% block title %}البيع — القمة{% endblock %}
 {% block content %}
 
-<div class="page-header"><h1>💰 البيع</h1></div>
+<style>
+  /* ==========================================================================
+     POS Screen Base & Responsive Layout (Full Widescreen Expansion)
+     ========================================================================== */
+  .pos-screen {
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) minmax(340px, 1fr);
+    gap: 1.25rem;
+    align-items: stretch;
+    height: calc(100vh - 3.5rem);
+    max-height: calc(100vh - 3.5rem);
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%; /* Expands to full screen width to remove dead margins */
+    box-sizing: border-box;
+    padding: 0.5rem;
+  }
 
-<form method="post" class="panel" id="saleForm">
+  .pos-col {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* ==========================================================================
+     Column 1: Shopping Cart Panel
+     ========================================================================== */
+  .pos-cart-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface, #ffffff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--radius-sm, 8px);
+    overflow: hidden;
+  }
+
+  .pos-cart-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    flex: 0 0 auto;
+  }
+
+  .pos-cart-head,
+  .pos-cart-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px 110px 110px 40px;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .pos-cart-head {
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    flex: 0 0 auto;
+  }
+
+  .pos-cart-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
+
+  .pos-cart-row {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+  }
+
+  .pos-cart-row:last-child {
+    border-bottom: none;
+  }
+
+  .pos-item-name {
+    min-width: 0;
+  }
+
+  .pos-item-name .line-custom-name-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    background: transparent;
+    color: var(--text, #0f172a);
+    font-weight: 600;
+    padding: 0.2rem 0;
+  }
+
+  .pos-item-name .line-product-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    display: block;
+  }
+
+  .pos-item-name .line-item-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+  }
+
+  .pos-item-name .line-item-actions button {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+
+  .pos-qty {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    justify-content: center;
+  }
+
+  .pos-qty button {
+    width: 1.8rem;
+    height: 1.8rem;
+    line-height: 1;
+    border-radius: 6px;
+    border: 1px solid var(--border, #e2e8f0);
+    background: var(--bg, #f8fafc);
+    color: var(--text, #0f172a);
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .pos-qty input.line-quantity {
+    width: 2.8rem;
+    text-align: center;
+    padding: 0.25rem;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 6px;
+    background: var(--surface, #ffffff);
+    color: var(--text, #0f172a);
+  }
+
+  .pos-cart-row input.line-price {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 6px;
+    background: var(--surface, #ffffff);
+    color: var(--text, #0f172a);
+  }
+
+  .pos-line-total {
+    font-weight: 700;
+  }
+
+  .pos-row-delete {
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--danger, #ef4444);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pos-row-delete:hover {
+    background: var(--bg, #f8fafc);
+  }
+
+  .pos-toolbar-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border, #e2e8f0);
+    flex: 0 0 auto;
+  }
+
+  /* ==========================================================================
+     Column 2: Checkout Panel Layout & Internal Spacing
+     ========================================================================== */
+  .pos-checkout {
+    background: var(--surface, #ffffff);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--radius-sm, 8px);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Scrollable Container with Inner Padding */
+  .pos-checkout-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 1.25rem;
+    box-sizing: border-box;
+  }
+
+  .pos-checkout h3 {
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .pos-checkout .field {
+    margin-bottom: 0.6rem;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
+  }
+
+  .pos-checkout-section {
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+  }
+
+  .pos-checkout-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  /* ==========================================================================
+     Customer Data Section (Distinct Separated Card Box)
+     ========================================================================== */
+  .customer-card-section {
+    background: var(--bg, #f8fafc);
+    border: 1px solid var(--border, #cbd5e1);
+    border-radius: var(--radius-sm, 8px);
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .customer-card-section h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text, #0f172a);
+  }
+
+  /* 2-Column Side-by-Side Grid for Name & Phone Inputs */
+  .customer-fields-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .customer-fields-grid .field {
+    margin-bottom: 0; /* Clear bottom margin inside card grid */
+  }
+
+  .customer-fields-grid input {
+    background: var(--surface, #ffffff) !important; /* Stand out against card background */
+  }
+
+  /* Customer Autocomplete Dropdown Styling */
+  .customer-suggestions-box {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--surface, #ffffff);
+    border: 1px solid var(--border, #cbd5e1);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .customer-suggestion-item {
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border, #f1f5f9);
+  }
+
+  .customer-suggestion-item:last-child {
+    border-bottom: none;
+  }
+
+  .customer-suggestion-item:hover {
+    background: var(--bg, #f8fafc);
+  }
+
+  .customer-suggestion-item .cs-name {
+    font-weight: 600;
+    color: var(--text, #0f172a);
+  }
+
+  .customer-suggestion-item .cs-phone {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+  }
+
+  /* ==========================================================================
+     Global Form Control Fixes (Border Padding & Focus States)
+     ========================================================================== */
+  .pos-checkout input[type="text"],
+  .pos-checkout input[type="number"],
+  .pos-checkout input[type="date"],
+  .pos-checkout select {
+    width: 100%;
+    height: 42px;
+    padding: 0.5rem 0.85rem;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: var(--radius-sm, 8px);
+    background: var(--bg, #f8fafc);
+    color: var(--text, #0f172a);
+    font-size: 0.9rem;
+    box-sizing: border-box; /* Prevents inputs from exceeding container limits */
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .pos-checkout input:focus,
+  .pos-checkout select:focus {
+    outline: none;
+    border-color: var(--accent, #16a34a);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+  }
+
+  .pos-checkout input::placeholder {
+    color: var(--text-muted, #64748b);
+    opacity: 0.75;
+  }
+
+  /* ==========================================================================
+     Payment Methods & Options Styling
+     ========================================================================== */
+  .pos-pay-methods {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .pos-pay-btn {
+    flex: 1 1 auto;
+    min-width: 90px;
+    text-align: center;
+    padding: 0.6rem 0.5rem;
+    border: 2px solid var(--border, #e2e8f0);
+    border-radius: var(--radius-sm, 8px);
+    background: var(--bg, #f8fafc);
+    color: var(--text, #0f172a);
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .pos-pay-btn.is-selected {
+    border-color: var(--accent, #16a34a);
+    color: var(--accent, #16a34a);
+    background: var(--surface, #ffffff);
+  }
+
+  .pos-online-submethod {
+    margin-top: 0.5rem;
+    display: none;
+  }
+
+  .pos-payment-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-bottom: 0.6rem;
+  }
+
+  .pos-payment-row .pos-payment-fields {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* ==========================================================================
+     Checkout Totals Summary & Submit Button
+     ========================================================================== */
+  .pos-totals {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border, #e2e8f0);
+    flex: 0 0 auto;
+    background: var(--bg, #f8fafc);
+  }
+
+  .pos-totals-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    padding: 0.2rem 0;
+  }
+
+  .pos-totals-row.pos-total-main {
+    font-size: 1.4rem;
+    font-weight: 800;
+    margin-top: 0.25rem;
+  }
+
+  .pos-submit-wrap {
+    padding: 0 1.25rem 1.25rem;
+    flex: 0 0 auto;
+    background: var(--bg, #f8fafc);
+  }
+
+  .pos-submit-btn {
+    width: 100%;
+    font-size: 1.25rem;
+    font-weight: 800;
+    padding: 0.9rem;
+    background: #16a34a;
+    border: 1px solid #16a34a;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    border-radius: var(--radius-sm, 8px);
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .pos-submit-btn:hover {
+    background: #15803d;
+  }
+
+  .pos-kbd-hint {
+    font-size: 0.7rem;
+    font-weight: 700;
+    opacity: 0.85;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+  }
+
+  /* ==========================================================================
+     Responsive Fallbacks
+     ========================================================================== */
+  @media (max-width: 980px) {
+    .pos-screen {
+      grid-template-columns: 1fr;
+      height: auto;
+      max-height: none;
+      overflow: visible;
+    }
+    .pos-cart-panel {
+      max-height: 50vh;
+    }
+    .customer-fields-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+</style>
+
+<form method="post" id="saleForm" class="pos-screen">
   <input type="hidden" name="confirmed_customer_id" id="confirmedCustomerIdInput" value="">
   <input type="hidden" name="force_new_customer" id="forceNewCustomerInput" value="">
 
-  <h2 style="margin-top: 0;">بيانات العميل</h2>
-  <p class="subtitle">صاحب عملية البيع.</p>
-  <div class="form-grid">
-    <div class="field" style="position:relative;">
-      <label>اسم العميل</label>
-      <input type="text" name="customer_name" id="customerNameInput" placeholder="أدخل اسم العميل" autocomplete="off">
-      <div class="customer-suggestions" id="customerNameSuggestions" hidden></div>
-    </div>
-    <div class="field" style="position:relative;">
-      <label>هاتف العميل</label>
-      <input type="text" name="customer_phone" id="customerPhoneInput" placeholder="أدخل رقم الهاتف" autocomplete="off">
-      <div class="customer-suggestions" id="customerPhoneSuggestions" hidden></div>
-    </div>
-  </div>
-
-  <div class="sale-lines-toolbar" style="margin-top: 1.5rem;">
-    <h2 style="margin: 0;">سطور البيع</h2>
-  </div>
-  <p class="subtitle" id="emptySaleHint">اضف المنتجات.</p>
-  <div id="saleLines"></div>
-
-  <div style="display:flex; gap:.5rem; margin-top:1rem;">
-    <button type="button" class="btn btn-sm btn-primary" id="openProductPickerButton">اختيار منتج</button>
-    <button type="button" class="btn btn-sm" id="addServiceLine">+ إضافة خدمة</button>
-  </div>
-
-  <h2 style="margin-top: 2rem">طلب توصيل</h2>
-  <label style="display:flex; align-items:center; gap:.5rem;">
-    <input type="checkbox" name="is_delivery_order" id="deliveryOrderCheckbox" style="width:auto;">
-    طلب توصيل
-  </label>
-  <div id="deliveryOrderRow" style="display:none; margin-top:.75rem;">
-    <div class="form-grid">
-      <div class="field">
-        <label>شركة الشحن</label>
-        <select name="delivery_provider" id="deliveryProviderSelect">
-          <option value="">اختر شركة الشحن…</option>
-          {% for p in delivery_providers if p.name != 'رايموند' %}
-            <option value="{{ p.slug }}">{{ p.name }}</option>
-          {% endfor %}
-          <option value="__custom__">أخرى (كتابة اسم الشركة)</option>
-        </select>
-        <input type="text" name="delivery_provider" id="deliveryProviderCustomInput"
-               placeholder="اكتب اسم شركة الشحن" style="display:none; margin-top:.5rem;" disabled>
+  <!-- ============ COLUMN 1: Main workspace ============ -->
+  <div class="pos-col">
+    <div class="pos-cart-panel">
+      <div class="pos-cart-toolbar">
+        <strong>سلة البيع</strong>
+        <div style="display:flex; gap:.5rem;">
+          <button type="button" class="btn btn-sm btn-primary" id="openProductPickerButton">اختيار منتج</button>
+          <button type="button" class="btn btn-sm" id="addServiceLine">+ إضافة خدمة</button>
+        </div>
       </div>
-      <div class="field">
-        <label>قيمة شحن الاوردر (ج.م)</label>
-        <input type="number" step="0.01" name="shipping_cost" id="shippingCostInput" value="0">
+      <div class="pos-cart-head">
+        <span>المنتج</span><span style="text-align:center;">الكمية</span><span>السعر</span><span>الإجمالي</span><span></span>
       </div>
+      <div class="pos-cart-body" id="saleLines"></div>
     </div>
+  </div>
 
-    <!-- Two SEPARATE financial decisions, kept visually distinct on
-         purpose: this only controls where the shipping/delivery fee
-         itself is deducted from (immediately) - it has nothing to do
-         with how the order's own money will later be received at وصل. -->
-    <div id="shippingCostSourceArea" style="margin-top:.5rem;">
-      <label class="field-label" style="display:block; margin-bottom:.4rem;">خصم قيمة الشحن من</label>
-      <div class="payment-method-buttons" style="display:flex; gap:.6rem; flex-wrap:wrap;">
-        <label class="payment-method-btn selected" data-source-btn="drawer">
-          <input type="radio" name="shipping_cost_source" value="drawer" checked style="width:auto;"> الدرج
+  <!-- ============ COLUMN 2: Checkout panel ============ -->
+  <div class="pos-col pos-checkout">
+    <div class="pos-checkout-scroll">
+      
+      <!-- Separated Customer Data Card -->
+      <div class="customer-card-section">
+        <h3>بيانات العميل</h3>
+        <div class="customer-fields-grid">
+          <div class="field">
+            <input type="text" id="customerNameInput" name="customer_name" placeholder="اسم العميل" autocomplete="off">
+            <div id="customerNameSuggestions" class="customer-suggestions-box" hidden></div>
+          </div>
+          <div class="field">
+            <input type="text" id="customerPhoneInput" name="customer_phone" placeholder="هاتف العميل" autocomplete="off">
+            <div id="customerPhoneSuggestions" class="customer-suggestions-box" hidden></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pos-checkout-section">
+        <label style="display:flex; align-items:center; gap:.5rem; font-weight:600;">
+          <input type="checkbox" name="is_delivery_order" id="deliveryOrderCheckbox" style="width:auto;">
+          طلب توصيل
         </label>
-        <label class="payment-method-btn" data-source-btn="online">
-          <input type="radio" name="shipping_cost_source" value="online" style="width:auto;"> تحويل أونلاين
-        </label>
+        <div id="deliveryOrderRow" style="display:none; margin-top:.6rem;">
+          <div class="field">
+            <label>شركة الشحن</label>
+            <select name="delivery_provider" id="deliveryProviderSelect">
+              <option value="">اختر شركة الشحن…</option>
+              {% for p in delivery_providers if p.name != 'رايموند' %}
+                <option value="{{ p.slug }}">{{ p.name }}</option>
+              {% endfor %}
+              <option value="__custom__">أخرى (كتابة اسم الشركة)</option>
+            </select>
+            <input type="text" name="delivery_provider" id="deliveryProviderCustomInput"
+                   placeholder="اكتب اسم شركة الشحن" style="display:none; margin-top:.5rem;" disabled>
+          </div>
+          <div class="field">
+            <label>قيمة شحن الاوردر (ج.م)</label>
+            <input type="number" step="0.01" name="shipping_cost" id="shippingCostInput" value="0">
+          </div>
+          <div id="shippingCostSourceArea">
+            <label class="field-label" style="display:block; margin-bottom:.3rem;">خصم قيمة الشحن من</label>
+            <div class="payment-method-buttons" style="display:flex; gap:.5rem; flex-wrap:wrap;">
+              <label class="payment-method-btn selected" data-source-btn="drawer">
+                <input type="radio" name="shipping_cost_source" value="drawer" checked style="width:auto;"> الدرج
+              </label>
+              <label class="payment-method-btn" data-source-btn="online">
+                <input type="radio" name="shipping_cost_source" value="online" style="width:auto;"> تحويل أونلاين
+              </label>
+            </div>
+            <p id="shippingSourceExplainer" class="subtitle" style="transition: opacity .25s ease; margin-top:.4rem; font-size:.78rem;">
+              سيتم خصم هذه القيمة من الدرج
+            </p>
+          </div>
+        </div>
       </div>
-      <p id="shippingSourceExplainer" class="subtitle" style="transition: opacity .25s ease; margin-top:.5rem;">
-        سيتم خصم هذه القيمة من الدرج
-      </p>
-    </div>
-  </div>
 
-  <div id="normalPaymentSection">
-    <h2 style="margin-top: 2rem">طرق الدفع</h2>
-    <div id="paymentRows"></div>
-    <button type="button" class="btn btn-sm" id="addPaymentRow">+ إضافة طريقة دفع</button>
-  </div>
+      <div class="pos-checkout-section" id="normalPaymentSection">
+        <h3>طرق الدفع</h3>
+        <div id="paymentRows"></div>
+        <button type="button" class="btn btn-sm" id="addPaymentRow">+ إضافة طريقة دفع أخرى</button>
+      </div>
 
-  <div class="panel" style="background: var(--bg); margin-top: 1rem">
-    <div style="display:flex; justify-content:space-between; font-weight:600;">
-      <span>الإجمالي</span><span id="saleTotalDisplay">0.00 EGP</span>
-    </div>
-    <div style="display:flex; justify-content:space-between;">
-      <span>المبلغ المدفوع</span><span id="paymentTotalDisplay">0.00 EGP</span>
-    </div>
-    <div style="display:flex; justify-content:space-between;">
-      <span>الإجمالي المتبقي</span><span id="remainingDisplay">0.00 EGP</span>
-    </div>
-  </div>
+      <div class="pos-checkout-section">
+        <h3>الإيصال</h3>
+        <label style="display:flex; align-items:center; gap:.5rem;">
+          <input type="checkbox" name="receipt_requested" id="receiptCheckbox" style="width:auto;">
+          إنشاء إيصال لهذا البيع
+        </label>
+        <div id="receiptFormatRow" style="display:none; margin-top:.5rem;">
+          <label style="display:flex; gap:1rem;">
+            <span><input type="radio" name="receipt_format" value="pdf" checked style="width:auto;"> PDF</span>
+            <span><input type="radio" name="receipt_format" value="excel" style="width:auto;"> Excel</span>
+          </label>
+        </div>
+        <div id="customerProcessRow" style="display:none; margin-top:.75rem;">
+          <label style="display:flex; align-items:center; gap:.5rem; font-weight:600;">
+            <input type="checkbox" name="customer_process" id="customerProcessCheckbox" style="width:auto;">
+            إكمال البيع كعملية عميل مع دفع جزئي
+          </label>
+        </div>
+        <div class="field" style="margin-top:.6rem; margin-bottom:0;">
+          <label>تاريخ البيع</label>
+          <input type="date" name="sale_date" value="{{ default_sale_date }}">
+        </div>
+      </div>
 
-  <h2 style="margin-top: 2rem">الإيصال</h2>
-  <label style="display:flex; align-items:center; gap:.5rem;">
-    <input type="checkbox" name="receipt_requested" id="receiptCheckbox" style="width:auto;">
-    إنشاء إيصال لهذا البيع
-  </label>
-  <div id="receiptFormatRow" style="display:none; margin-top:.6rem;">
-    <label style="display:flex; gap:1rem;">
-      <span><input type="radio" name="receipt_format" value="pdf" checked style="width:auto;"> PDF</span>
-      <span><input type="radio" name="receipt_format" value="excel" style="width:auto;"> Excel</span>
-    </label>
-  </div>
+    </div> <!-- /.pos-checkout-scroll -->
 
-  <div id="customerProcessRow" style="display:none; margin-top:1rem;">
-    <label style="display:flex; align-items:center; gap:.5rem; font-weight:600;">
-      <input type="checkbox" name="customer_process" id="customerProcessCheckbox" style="width:auto;">
-      إكمال البيع كعملية عميل مع دفع جزئي
-    </label>
-  </div>
-  <div class="form-grid" style="margin-top:1rem; gap:1rem;">
-    <div class="field" style="flex:1;">
-      <label>تاريخ البيع</label>
-      <input type="date" name="sale_date" value="{{ default_sale_date }}">
+    <div class="pos-totals">
+      <div class="pos-totals-row"><span>المبلغ المدفوع</span><span id="paymentTotalDisplay">0.00 EGP</span></div>
+      <div class="pos-totals-row"><span>المتبقي</span><span id="remainingDisplay">0.00 EGP</span></div>
+      <div class="pos-totals-row pos-total-main"><span>الإجمالي</span><span id="saleTotalDisplay">0.00 EGP</span></div>
     </div>
-  </div>
-  <div style="margin-top:1.5rem; display:flex; gap:1rem; flex-wrap:wrap;">
-    <button id="saleSubmitButton" type="submit" class="btn btn-primary">إكمال البيع</button>
-    <a href="{{ url_for('dashboard.index') }}" class="btn">إلغاء</a>
+    <div class="pos-submit-wrap">
+      <button id="saleSubmitButton" type="submit" class="btn btn-primary pos-submit-btn">
+        <span>إكمال البيع</span>
+        <span class="pos-kbd-hint">Enter / F12</span>
+      </button>
+    </div>
   </div>
 </form>
 
 <template id="saleLineTemplate">
-  <div class="panel sale-line" style="background: var(--bg);">
+  <div class="pos-cart-row sale-line">
     <input type="hidden" name="product_id" class="line-product-id">
     <input type="hidden" name="service_description" value="">
     <input type="hidden" name="line_token" class="line-token">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem; margin-bottom:.75rem;">
-      <strong class="line-product-label">عنصر البيع</strong>
-      <button type="button" class="btn btn-sm btn-danger remove-line">إزالة السطر</button>
-    </div>
-    <div class="form-grid">
-      <div class="field">
-        <label>المنتج</label>
-        <div style="display:flex; align-items:center; gap:.5rem;">
-          <input type="text" class="selected-product-label line-custom-name-input" name="custom_product_name"
-                 placeholder="-- اختر منتج --"
-                 style="flex:1; min-height:2.4rem; padding:.5rem .75rem; border:1px solid var(--border); border-radius:8px; background:var(--surface);">
-          <button type="button" class="btn btn-sm choose-product-button">اختيار منتج</button>
-          <button type="button" class="btn btn-sm clear-product-button">إزالة</button>
-        </div>
-        <small class="muted line-product-meta" style="display:block; margin-top:.35rem; font-size:.86rem; color:#555;">
-          المخزون: <span class="line-stock">-</span>{% if show_purchase_price %} · سعر الشراء: <span class="line-purchase-price">-</span>{% endif %}
-        </small>
-      </div>
-      <div class="field">
-        <label>الكمية</label>
-        <input type="number" name="quantity" class="line-quantity" min="1" value="1">
-      </div>
-      <div class="field">
-        <label>سعر البيع (ج.م)</label>
-        <input type="number" step="0.01" name="selling_price" class="line-price">
-      </div>
-      <div class="field">
-        <label>الضمان (أيام)</label>
-        <input type="number" name="warranty_days" class="line-warranty" min="0" placeholder="{{ default_warranty_days }} (افتراضي)">
+    <div class="pos-item-name">
+      <strong class="line-product-label" style="display:none;">عنصر البيع</strong>
+      <input type="text" class="selected-product-label line-custom-name-input" name="custom_product_name"
+             placeholder="-- اختر منتج --">
+      <small class="line-product-meta">
+        المخزون: <span class="line-stock">-</span>{% if show_purchase_price %} · شراء: <span class="line-purchase-price">-</span>{% endif %}
+      </small>
+      <div class="line-item-actions">
+        <button type="button" class="btn btn-sm choose-product-button">تغيير</button>
+        <button type="button" class="btn btn-sm clear-product-button">إزالة الاختيار</button>
+        <input type="number" name="warranty_days" class="line-warranty" min="0"
+               placeholder="الضمان ({{ default_warranty_days }} يوم)" style="width:90px; padding:.15rem .3rem; font-size:.75rem;">
       </div>
     </div>
+    <div class="pos-qty">
+      <button type="button" class="qty-dec" tabindex="-1">−</button>
+      <input type="number" name="quantity" class="line-quantity" min="1" value="1">
+      <button type="button" class="qty-inc" tabindex="-1">+</button>
+    </div>
+    <input type="number" step="0.01" name="selling_price" class="line-price">
+    <span class="pos-line-total">0.00</span>
+    <button type="button" class="pos-row-delete remove-line" title="حذف السطر">✕</button>
   </div>
 </template>
 
 <template id="serviceLineTemplate">
-  <div class="panel sale-line" style="background: var(--bg);">
+  <div class="pos-cart-row sale-line">
     <input type="hidden" name="product_id" class="line-product-id" value="">
     <input type="hidden" name="custom_product_name" value="">
     <input type="hidden" name="line_token" class="line-token">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem; margin-bottom:.75rem;">
-      <strong class="line-product-label">عنصر البيع</strong>
-      <button type="button" class="btn btn-sm btn-danger remove-line">إزالة المنتج/الخدمه</button>
+    <input type="hidden" name="quantity" class="line-quantity" value="1">
+    <input type="hidden" name="warranty_days" value="">
+    <div class="pos-item-name">
+      <strong class="line-product-label" style="display:none;">خدمة</strong>
+      <input type="text" name="service_description" class="service-description line-custom-name-input" placeholder="أدخل اسم الخدمة">
     </div>
-    <div class="form-grid">
-      <div class="field">
-        <label>الخدمة</label>
-        <input type="text" name="service_description" class="service-description" placeholder="أدخل اسم الخدمة">
-      </div>
-      <div class="field">
-        <label>السعر (ج.م)</label>
-        <input type="number" step="0.01" name="selling_price" class="line-price">
-      </div>
-      <input type="hidden" name="quantity" class="line-quantity" value="1">
-      <input type="hidden" name="warranty_days" value="">
-    </div>
-  </div>
-</template>
-
-<template id="paymentRowTemplate">
-  <div class="form-grid payment-row" style="margin-bottom:.5rem;">
-    <div class="field" style="margin-bottom:0;">
-      <select name="payment_method">
-        {% for value, label in payment_methods %}
-        <option value="{{ value }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field" style="margin-bottom:0;">
-      <input type="number" step="0.01" name="payment_amount" class="payment-amount" placeholder="المبلغ">
-    </div>
-    <div class="field" style="margin-bottom:0;">
-      <button type="button" class="btn btn-sm btn-danger remove-payment">حذف</button>
-    </div>
+    <div class="pos-qty"><span class="subtitle" style="font-size:.75rem;">خدمة</span></div>
+    <input type="number" step="0.01" name="selling_price" class="line-price">
+    <span class="pos-line-total">0.00</span>
+    <button type="button" class="pos-row-delete remove-line" title="حذف السطر">✕</button>
   </div>
 </template>
 
@@ -216,10 +642,9 @@
   const lineTemplate = document.getElementById("saleLineTemplate");
   const paymentsContainer = document.getElementById("paymentRows");
   const productData = {{ products|tojson }};
+  const paymentMethods = {{ payment_methods|tojson }};
   const servicePlaceholderId = {{ service_placeholder_id if service_placeholder_id is not none else 'null' }};
   const serviceLineTemplate = document.getElementById("serviceLineTemplate");
-  const paymentTemplate = document.getElementById("paymentRowTemplate");
-  const emptySaleHint = document.getElementById("emptySaleHint");
   const defaultProductId = {{ preselected_id if preselected_id is not none else 'null' }};
   const customerProcessCheckbox = document.getElementById("customerProcessCheckbox");
   const customerProcessRow = document.getElementById("customerProcessRow");
@@ -231,7 +656,7 @@
 
   let pendingSubmit = false;
 
-  // ---------- smart customer autocomplete (spec §3-6) ----------
+  // ---------- smart customer autocomplete ----------
   function setupCustomerAutocomplete(input, suggestionsBox) {
     let debounceTimer = null;
     let activeRequest = 0;
@@ -252,7 +677,7 @@
     }
 
     input.addEventListener("input", () => {
-      confirmedCustomerIdInput.value = ""; // typing invalidates any previous selection
+      confirmedCustomerIdInput.value = "";
       const q = input.value.trim();
       clearTimeout(debounceTimer);
       if (q.length < 2) {
@@ -264,7 +689,7 @@
         fetch(`{{ url_for('customers.search') }}?q=${encodeURIComponent(q)}`)
           .then((r) => r.json())
           .then((customers) => {
-            if (requestId !== activeRequest) return; // a newer keystroke already superseded this
+            if (requestId !== activeRequest) return;
             renderSuggestions(customers);
           })
           .catch(() => { suggestionsBox.hidden = true; });
@@ -281,7 +706,6 @@
     });
 
     input.addEventListener("blur", () => {
-      // small delay so a click on a suggestion registers before we hide it
       setTimeout(() => { suggestionsBox.hidden = true; }, 150);
     });
     input.addEventListener("focus", () => {
@@ -308,7 +732,10 @@
     linesContainer.querySelectorAll(".sale-line").forEach((line) => {
       const qty = parseFloat(line.querySelector(".line-quantity").value) || 0;
       const price = parseFloat(line.querySelector(".line-price").value) || 0;
-      saleTotal += qty * price;
+      const lineTotal = qty * price;
+      saleTotal += lineTotal;
+      const totalEl = line.querySelector(".pos-line-total");
+      if (totalEl) totalEl.textContent = lineTotal.toFixed(2);
     });
     let paymentTotal = 0;
     paymentsContainer.querySelectorAll(".payment-amount").forEach((input) => {
@@ -326,9 +753,7 @@
     }
   }
 
-  function updateEmptyHint() {
-    emptySaleHint.style.display = linesContainer.children.length ? "none" : "block";
-  }
+  function updateEmptyHint() {}
 
   function addLine(templateEl) {
     const clone = templateEl.content.cloneNode(true);
@@ -337,15 +762,95 @@
     linesContainer.appendChild(clone);
     updateEmptyHint();
     recalcTotals();
-    return lineEl;
+    return linesContainer.lastElementChild;
   }
 
   const addPaymentRowButton = document.getElementById("addPaymentRow");
   const MAX_PAYMENT_METHODS = 3;
 
+  const cashMethod = paymentMethods.find((m) => m[0] === "cash") || ["cash", "نقدي"];
+  const onlineSubMethods = paymentMethods.filter((m) => m[0] !== "cash");
+
   function updateAddPaymentButtonState() {
     const count = paymentsContainer.querySelectorAll(".payment-row").length;
     addPaymentRowButton.disabled = count >= MAX_PAYMENT_METHODS;
+  }
+
+  function buildPaymentRow() {
+    const row = document.createElement("div");
+    row.className = "pos-payment-row payment-row";
+
+    const fields = document.createElement("div");
+    fields.className = "pos-payment-fields";
+
+    const btnWrap = document.createElement("div");
+    btnWrap.className = "pos-pay-methods";
+
+    const cashBtn = document.createElement("button");
+    cashBtn.type = "button";
+    cashBtn.className = "pos-pay-btn is-selected";
+    cashBtn.textContent = cashMethod[1] || "نقدي";
+    cashBtn.dataset.value = cashMethod[0];
+
+    const onlineBtn = document.createElement("button");
+    onlineBtn.type = "button";
+    onlineBtn.className = "pos-pay-btn";
+    onlineBtn.textContent = "أونلاين";
+    const defaultOnline = onlineSubMethods[0] || ["vodafone_cash", "أونلاين"];
+    onlineBtn.dataset.value = defaultOnline[0];
+
+    const hiddenMethod = document.createElement("input");
+    hiddenMethod.type = "hidden";
+    hiddenMethod.name = "payment_method";
+    hiddenMethod.value = cashMethod[0];
+
+    const subSelect = document.createElement("select");
+    subSelect.className = "pos-online-submethod";
+    onlineSubMethods.forEach(([value, label]) => {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      subSelect.appendChild(opt);
+    });
+
+    function selectMethod(btn, value) {
+      [cashBtn, onlineBtn].forEach((b) => b.classList.remove("is-selected"));
+      btn.classList.add("is-selected");
+      hiddenMethod.value = value;
+      subSelect.style.display = (btn === onlineBtn) ? "block" : "none";
+    }
+    cashBtn.addEventListener("click", () => selectMethod(cashBtn, cashMethod[0]));
+    onlineBtn.addEventListener("click", () => selectMethod(onlineBtn, subSelect.value || defaultOnline[0]));
+    subSelect.addEventListener("change", () => {
+      hiddenMethod.value = subSelect.value;
+      onlineBtn.textContent = "أونلاين";
+    });
+
+    btnWrap.appendChild(cashBtn);
+    btnWrap.appendChild(onlineBtn);
+
+    const amountInput = document.createElement("input");
+    amountInput.type = "number";
+    amountInput.step = "0.01";
+    amountInput.name = "payment_amount";
+    amountInput.className = "payment-amount";
+    amountInput.placeholder = "المبلغ";
+    amountInput.style.marginTop = ".4rem";
+
+    fields.appendChild(btnWrap);
+    fields.appendChild(subSelect);
+    fields.appendChild(hiddenMethod);
+    fields.appendChild(amountInput);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "pos-row-delete remove-payment";
+    removeBtn.title = "حذف طريقة الدفع";
+    removeBtn.textContent = "✕";
+
+    row.appendChild(fields);
+    row.appendChild(removeBtn);
+    return row;
   }
 
   function addPaymentRow() {
@@ -353,8 +858,7 @@
       updateAddPaymentButtonState();
       return;
     }
-    const clone = paymentTemplate.content.cloneNode(true);
-    paymentsContainer.appendChild(clone);
+    paymentsContainer.appendChild(buildPaymentRow());
     updateAddPaymentButtonState();
     recalcTotals();
   }
@@ -363,6 +867,28 @@
     if (e.target.classList.contains("remove-line")) {
       e.target.closest(".sale-line").remove();
       updateEmptyHint();
+      recalcTotals();
+    }
+    if (e.target.classList.contains("qty-inc") || e.target.classList.contains("qty-dec")) {
+      const qtyInput = e.target.closest(".pos-qty").querySelector(".line-quantity");
+      let val = parseInt(qtyInput.value, 10) || 1;
+      val = e.target.classList.contains("qty-inc") ? val + 1 : Math.max(1, val - 1);
+      qtyInput.value = val;
+      qtyInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    if (e.target.classList.contains("choose-product-button")) {
+      const line = e.target.closest(".sale-line");
+      openProductPicker(line);
+    }
+    if (e.target.classList.contains("clear-product-button")) {
+      const line = e.target.closest(".sale-line");
+      line.querySelector(".line-product-id").value = "";
+      line.querySelector(".selected-product-label").value = "";
+      const stockEl = line.querySelector(".line-stock");
+      if (stockEl) stockEl.textContent = "-";
+      const purchaseEl = line.querySelector(".line-purchase-price");
+      if (purchaseEl) purchaseEl.textContent = "-";
+      line.querySelector(".line-price").value = "0.00";
       recalcTotals();
     }
   });
@@ -379,17 +905,10 @@
 
   addPaymentRowButton.addEventListener("click", addPaymentRow);
 
-  // طلب توصيل (spec §2): hides the normal payment section, doesn't ask
-  // for received money, and relabels the submit button to إتمام عملية
-  // الاوردر so it's clear this only creates the order, not receives cash.
   const deliveryOrderCheckbox = document.getElementById("deliveryOrderCheckbox");
   const deliveryOrderRow = document.getElementById("deliveryOrderRow");
   const normalPaymentSection = document.getElementById("normalPaymentSection");
 
-  // "أخرى" (custom shipping company) toggle: only one of the two
-  // delivery_provider-named fields is ever enabled at a time, so the
-  // backend always receives exactly one value under that field name -
-  // either the picked slug or the freely typed company name.
   const deliveryProviderSelect = document.getElementById("deliveryProviderSelect");
   const deliveryProviderCustomInput = document.getElementById("deliveryProviderCustomInput");
   if (deliveryProviderSelect && deliveryProviderCustomInput) {
@@ -408,17 +927,13 @@
     const isDelivery = e.target.checked;
     deliveryOrderRow.style.display = isDelivery ? "block" : "none";
     normalPaymentSection.style.display = isDelivery ? "none" : "block";
-    submitButton.textContent = isDelivery ? "إتمام عملية الاوردر" : "إكمال البيع";
+    submitButton.querySelector("span").textContent = isDelivery ? "إتمام عملية الاوردر" : "إكمال البيع";
     if (isDelivery) {
       paymentsContainer.querySelectorAll(".payment-row").forEach((row) => row.remove());
     }
     recalcTotals();
   });
 
-  // قيمة شحن الاوردر: smooth explanatory-text swap between الدرج and
-  // التحويلات الأونلاين (spec §2/§15) - purely a source-of-deduction
-  // choice for the SHIPPING fee, kept entirely separate from how the
-  // order's own money is later received at وصل.
   const shippingSourceExplainer = document.getElementById("shippingSourceExplainer");
   document.querySelectorAll('input[name="shipping_cost_source"]').forEach((radio) => {
     radio.addEventListener("change", (e) => {
@@ -444,24 +959,6 @@
     document.getElementById("receiptFormatRow").style.display = e.target.checked ? "block" : "none";
   });
 
-  function addLineFromProduct(productId) {
-    const product = productData.find((p) => p.id === productId);
-    if (!product) return;
-    const lineEl = addLine(lineTemplate);
-    lineEl.querySelector(".line-product-id").value = product.id;
-    lineEl.querySelector(".selected-product-label").value = product.name;
-    lineEl.querySelector(".line-product-label").textContent = product.name;
-    lineEl.querySelector(".line-price").value = product.selling_price;
-    lineEl.querySelector(".line-stock").textContent = product.quantity;
-    const purchasePriceEl = lineEl.querySelector(".line-purchase-price");
-    if (purchasePriceEl) {
-      purchasePriceEl.textContent = product.purchase_price != null ? product.purchase_price : "-";
-    }
-    recalcTotals();
-  }
-
-  // ---------- product picker ----------
-
   function fillLineWithProduct(targetLineEl, p) {
     targetLineEl.querySelector(".line-product-id").value = p.id;
     targetLineEl.querySelector(".selected-product-label").value = p.name;
@@ -472,7 +969,18 @@
     if (purchasePriceEl) {
       purchasePriceEl.textContent = p.purchase_price != null ? p.purchase_price : "-";
     }
+    recalcTotals();
   }
+
+  function addLineFromProduct(productId) {
+    const product = productData.find((p) => p.id === productId);
+    if (!product) return null;
+    const lineEl = addLine(lineTemplate);
+    fillLineWithProduct(lineEl, product);
+    return lineEl;
+  }
+
+  // ---------- Complete Product Picker Modal ----------
 
   let pickerTargetLineEl = null;
   let pickerSelectedIds = new Set();
@@ -520,7 +1028,6 @@
 
       left.appendChild(checkbox);
       left.appendChild(infoBlock);
-
       item.appendChild(left);
 
       if (p.image_url) {
@@ -535,309 +1042,85 @@
     });
   }
 
-  function openProductPicker(lineEl) {
+  function openProductPicker(lineEl = null) {
     pickerTargetLineEl = lineEl;
     pickerSelectedIds = new Set();
 
-    const overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
+    if (lineEl) {
+      const currentId = parseInt(lineEl.querySelector(".line-product-id").value, 10);
+      if (currentId) pickerSelectedIds.add(currentId);
+    }
+
+    pickerOverlay = document.createElement("div");
+    pickerOverlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
 
     const box = document.createElement("div");
     box.className = "panel";
-    box.style.cssText = "max-width:480px;width:100%;max-height:82vh;overflow:auto;display:flex;flex-direction:column;";
+    box.style.cssText = "max-width:480px;width:100%;max-height:82vh;overflow:auto;display:flex;flex-direction:column;gap:1rem;";
     box.dir = "rtl";
 
     box.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:.75rem;">
-        <h2 style="margin:0;">اختيار منتج أو أكثر</h2>
-        <button type="button" class="btn btn-sm" id="pickerCloseButton">إغلاق</button>
+        <strong style="font-size:1.1rem;">اختيار منتج</strong>
+        <button type="button" class="btn btn-sm" id="closePickerBtn">✕</button>
       </div>
-      <p class="subtitle">حدد صنفاً واحداً أو عدة أصناف، ثم اضغط "إضافة المحدد" لإضافتها كلها للبيع دفعة واحدة.</p>
-      <input type="search" id="pickerSearchInput" placeholder="ابحث عن منتج..." style="margin-bottom:.75rem;">
-      <div id="pickerList" style="overflow:auto; flex:1;"></div>
-      <button type="button" class="btn btn-primary" id="pickerAddButton" style="width:100%; margin-top:1rem;">إضافة المحدد</button>
+      <input type="text" id="pickerSearchInput" placeholder="بحث باسم المنتج..." style="width:100%; box-sizing:border-box; padding:.5rem;">
+      <div id="pickerListContainer" style="flex:1; overflow-y:auto; max-height:40vh; border:1px solid var(--border); border-radius:8px; padding:.5rem;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:.5rem;">
+        <button type="button" class="btn btn-sm" id="cancelPickerBtn">إلغاء</button>
+        <button type="button" class="btn btn-sm btn-primary" id="confirmPickerBtn">تأكيد الاختيار</button>
+      </div>
     `;
 
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
+    pickerOverlay.appendChild(box);
+    document.body.appendChild(pickerOverlay);
 
-    pickerOverlay = overlay;
-    pickerListEl = box.querySelector("#pickerList");
+    pickerListEl = box.querySelector("#pickerListContainer");
     pickerSearchInputEl = box.querySelector("#pickerSearchInput");
 
-    pickerSearchInputEl.addEventListener("input", () => renderPickerList(pickerSearchInputEl.value));
-    box.querySelector("#pickerCloseButton").addEventListener("click", closeProductPicker);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) closeProductPicker();
-    });
-    box.querySelector("#pickerAddButton").addEventListener("click", () => {
-      if (!pickerSelectedIds.size) {
-        alert("اختر منتجاً واحداً على الأقل.");
+    renderPickerList();
+
+    pickerSearchInputEl.addEventListener("input", (e) => renderPickerList(e.target.value));
+
+    const closePicker = () => {
+      if (pickerOverlay) {
+        pickerOverlay.remove();
+        pickerOverlay = null;
+      }
+    };
+
+    box.querySelector("#closePickerBtn").addEventListener("click", closePicker);
+    box.querySelector("#cancelPickerBtn").addEventListener("click", closePicker);
+
+    box.querySelector("#confirmPickerBtn").addEventListener("click", () => {
+      const selectedArray = Array.from(pickerSelectedIds);
+      if (selectedArray.length === 0) {
+        closePicker();
         return;
       }
-      const selectedProducts = productData.filter((p) => pickerSelectedIds.has(p.id));
-      const lineAlreadyHasProduct = pickerTargetLineEl
-        ? !!pickerTargetLineEl.querySelector(".line-product-id").value
-        : true;
-      selectedProducts.forEach((p, index) => {
-        const targetLineEl = (index === 0 && pickerTargetLineEl && !lineAlreadyHasProduct)
-          ? pickerTargetLineEl
-          : addLine(lineTemplate);
-        fillLineWithProduct(targetLineEl, p);
-      });
-      recalcTotals();
-      closeProductPicker();
-    });
 
-    renderPickerList("");
-    pickerSearchInputEl.focus();
-  }
-
-  function closeProductPicker() {
-    if (pickerOverlay) {
-      document.body.removeChild(pickerOverlay);
-    }
-    pickerOverlay = null;
-    pickerListEl = null;
-    pickerSearchInputEl = null;
-    pickerTargetLineEl = null;
-  }
-
-  document.getElementById("openProductPickerButton").addEventListener("click", () => openProductPicker(null));
-
-  linesContainer.addEventListener("click", (e) => {
-    if (e.target.classList.contains("choose-product-button")) {
-      openProductPicker(e.target.closest(".sale-line"));
-    }
-    if (e.target.classList.contains("clear-product-button")) {
-      const lineEl = e.target.closest(".sale-line");
-      lineEl.querySelector(".line-product-id").value = "";
-      lineEl.querySelector(".selected-product-label").value = "";
-      lineEl.querySelector(".line-product-label").textContent = "عنصر البيع";
-      lineEl.querySelector(".line-stock").textContent = "-";
-      const purchasePriceEl = lineEl.querySelector(".line-purchase-price");
-      if (purchasePriceEl) purchasePriceEl.textContent = "-";
-      recalcTotals();
-    }
-  });
-
-  // ---------- customer duplicate-name confirmation (Rule 5) ----------
-
-  function getTransactionCustomerName() {
-    return customerNameInput.value.trim();
-  }
-  function getTransactionCustomerPhone() {
-    return customerPhoneInput.value.trim();
-  }
-
-  function showCustomerConfirmDialog(candidates, txnName) {
-    const overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
-
-    const box = document.createElement("div");
-    box.className = "panel";
-    box.style.cssText = "max-width:480px;width:100%;max-height:82vh;overflow:auto;";
-    box.dir = "rtl";
-
-    let candidatesHtml = candidates.map((c, i) => `
-      <label style="display:flex; align-items:center; gap:.5rem; padding:.5rem 0; border-bottom:1px solid var(--border);">
-        <input type="radio" name="customer_candidate" value="${c.id}" style="width:auto;" ${i === 0 ? "checked" : ""}>
-        <span>${escapeHtml(c.name || "بدون اسم")} · ${escapeHtml(c.phone || "بدون رقم هاتف")}${c.last_purchase_date ? " · آخر شراء: " + escapeHtml(c.last_purchase_date.slice(0, 10)) : ""}</span>
-      </label>
-    `).join("");
-
-    box.innerHTML = `
-      <h2>يوجد أكثر من عميل بهذا الاسم</h2>
-      <p class="subtitle">الاسم "${escapeHtml(txnName)}" يطابق أكثر من عميل مسجل. اختر العميل الصحيح، أو أنشئ عميلاً جديداً.</p>
-      <div style="margin:1rem 0;">${candidatesHtml}</div>
-      <div style="display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end;">
-        <button type="button" class="btn" id="customerDialogCancel">إلغاء</button>
-        <button type="button" class="btn" id="customerDialogCreateNew">إنشاء عميل جديد</button>
-        <button type="button" class="btn btn-primary" id="customerDialogUseExisting">استخدام العميل المحدد</button>
-      </div>
-    `;
-
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    function close() {
-      document.body.removeChild(overlay);
-    }
-
-    document.getElementById("customerDialogCancel").addEventListener("click", () => {
-      close();
-    });
-
-    document.getElementById("customerDialogCreateNew").addEventListener("click", () => {
-      document.getElementById("forceNewCustomerInput").value = "1";
-      document.getElementById("confirmedCustomerIdInput").value = "";
-      close();
-      pendingSubmit = true;
-      saleForm.requestSubmit(submitButton);
-    });
-
-    document.getElementById("customerDialogUseExisting").addEventListener("click", () => {
-      const selected = box.querySelector('input[name="customer_candidate"]:checked');
-      if (!selected) {
-        alert("اختر عميل من القائمة أولاً.");
-        return;
-      }
-      document.getElementById("confirmedCustomerIdInput").value = selected.value;
-      document.getElementById("forceNewCustomerInput").value = "";
-      close();
-      pendingSubmit = true;
-      saleForm.requestSubmit(submitButton);
-    });
-  }
-
-  // ---------- Customer duplicate name/phone, auto-fill confirmation ----------
-
-  function fieldLabel(field) {
-    return field === "name" ? "الاسم" : "رقم الهاتف";
-  }
-
-  function showMatchConfirmDialog(candidate, missingFields, txnName, txnPhone) {
-    const overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;";
-
-    const box = document.createElement("div");
-    box.className = "panel";
-    box.style.cssText = "max-width:440px;width:100%;max-height:82vh;overflow:auto;";
-    box.dir = "rtl";
-
-    const existingName = candidate.name || "بدون اسم";
-    const existingPhone = candidate.phone || "بدون رقم هاتف";
-
-    let bodyText;
-    let confirmLabel;
-    if (missingFields.length) {
-      const missingText = missingFields.map(fieldLabel).join(" و");
-      bodyText = `يوجد عميل مطابق: <strong>${escapeHtml(existingName)}</strong> · ${escapeHtml(existingPhone)}.
-        بيانات ${escapeHtml(missingText)} غير مكتملة لدى هذا العميل. هل تريد إكمالها ببيانات هذا البيع
-        (${escapeHtml(txnName || "—")} · ${escapeHtml(txnPhone || "—")})، أم أن هذا عميل جديد؟`;
-      confirmLabel = "إكمال بياناته";
-    } else {
-      bodyText = `الاسم/الرقم الذي أدخلته يخص عميلاً مسجلاً بالفعل: <strong>${escapeHtml(existingName)}</strong> · ${escapeHtml(existingPhone)}.
-        سيتم تسجيل هذا البيع على هذا العميل. هل هذا صحيح، أم أن هذا عميل جديد؟`;
-      confirmLabel = "نعم، هذا هو العميل";
-    }
-
-    box.innerHTML = `
-      <h2>تأكيد ربط البيع بالعميل</h2>
-      <p class="subtitle">${bodyText}</p>
-      <div style="display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end; margin-top:1rem;">
-        <button type="button" class="btn" id="fillDialogCancel">إلغاء</button>
-        <button type="button" class="btn" id="fillDialogDifferentPerson">إنشاء عميل جديد</button>
-        <button type="button" class="btn btn-primary" id="fillDialogConfirm">${confirmLabel}</button>
-      </div>`;
-
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    function close() {
-      document.body.removeChild(overlay);
-    }
-
-    document.getElementById("fillDialogCancel").addEventListener("click", () => {
-      close();
-    });
-
-    document.getElementById("fillDialogDifferentPerson").addEventListener("click", () => {
-      document.getElementById("forceNewCustomerInput").value = "1";
-      document.getElementById("confirmedCustomerIdInput").value = "";
-      close();
-      pendingSubmit = true;
-      saleForm.requestSubmit(submitButton);
-    });
-
-    document.getElementById("fillDialogConfirm").addEventListener("click", () => {
-      document.getElementById("confirmedCustomerIdInput").value = candidate.id;
-      document.getElementById("forceNewCustomerInput").value = "";
-      close();
-      pendingSubmit = true;
-      saleForm.requestSubmit(submitButton);
-    });
-  }
-
-  saleForm.addEventListener("submit", (e) => {
-    customerNameInput.value = customerNameInput.value.trim();
-    customerPhoneInput.value = customerPhoneInput.value.trim();
-
-    const saleTotal = Array.from(linesContainer.querySelectorAll(".sale-line")).reduce((sum, line) => {
-      const qty = parseFloat(line.querySelector(".line-quantity").value) || 0;
-      const price = parseFloat(line.querySelector(".line-price").value) || 0;
-      return sum + qty * price;
-    }, 0);
-    const paymentTotal = Array.from(paymentsContainer.querySelectorAll(".payment-amount")).reduce((sum, input) => sum + (parseFloat(input.value) || 0), 0);
-    const mismatch = Math.abs(saleTotal - paymentTotal) > 0.009 && !deliveryOrderCheckbox.checked;
-
-    if (mismatch && !customerProcessCheckbox.checked) {
-      e.preventDefault();
-      submitButton.disabled = false;
-      alert("يجب أن يتطابق إجمالي المدفوع مع الإجمالي أو تفعيل خيار عملية العميل قبل إكمال البيع.");
-      return;
-    }
-
-    const remainingDebt = saleTotal - paymentTotal;
-
-    // Delivery orders specifically require BOTH name and phone (spec §2/§7).
-    if (deliveryOrderCheckbox.checked) {
-      if (!getTransactionCustomerName()) {
-        e.preventDefault();
-        alert("اسم العميل مطلوب لإنشاء طلب توصيل.");
-        return;
-      }
-      if (!getTransactionCustomerPhone()) {
-        e.preventDefault();
-        alert("رقم هاتف العميل مطلوب لإنشاء طلب توصيل.");
-        return;
-      }
-    }
-
-    if (remainingDebt > 0.009 && !getTransactionCustomerName() && !getTransactionCustomerPhone()) {
-      e.preventDefault();
-      alert("لإتمام عملية بها مبلغ متبقٍ (دين)، يجب إدخال اسم العميل أو رقم هاتفه على الأقل.");
-      return;
-    }
-
-    if (pendingSubmit) {
-      pendingSubmit = false;
-      return;
-    }
-
-    const txnName = getTransactionCustomerName();
-    const txnPhone = getTransactionCustomerPhone();
-    if (!txnName && !txnPhone) {
-      return;
-    }
-
-    e.preventDefault();
-    fetch("{{ url_for('sales.check_customer') }}", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customer_name: txnName, customer_phone: txnPhone }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.status === "needs_confirmation") {
-          showCustomerConfirmDialog(data.candidates, txnName);
-        } else if (data.status === "needs_match_confirmation") {
-          showMatchConfirmDialog(data.candidate, data.missing_fields, txnName, txnPhone);
-        } else {
-          pendingSubmit = true;
-          saleForm.requestSubmit(submitButton);
+      if (pickerTargetLineEl) {
+        const firstProduct = productData.find((p) => p.id === selectedArray[0]);
+        if (firstProduct) fillLineWithProduct(pickerTargetLineEl, firstProduct);
+        for (let i = 1; i < selectedArray.length; i++) {
+          addLineFromProduct(selectedArray[i]);
         }
-      })
-      .catch(() => {
-        pendingSubmit = true;
-        saleForm.requestSubmit(submitButton);
-      });
-  });
-
-  if (defaultProductId) {
-    addLineFromProduct(defaultProductId);
+      } else {
+        selectedArray.forEach((id) => addLineFromProduct(id));
+      }
+      closePicker();
+    });
   }
-  addPaymentRow();
-  recalcTotals();
+
+  // Open product picker via top button
+  const openProductPickerBtn = document.getElementById("openProductPickerButton");
+  if (openProductPickerBtn) {
+    openProductPickerBtn.addEventListener("click", () => openProductPicker(null));
+  }
+
+  // Add initial empty payment row on load if none exists
+  if (paymentsContainer.querySelectorAll(".payment-row").length === 0) {
+    addPaymentRow();
+  }
 </script>
 {% endblock %}
