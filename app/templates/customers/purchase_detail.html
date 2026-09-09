@@ -1,6 +1,19 @@
 {% extends "base.html" %}
 {% block title %}تفاصيل الشراء - Al-Qemma{% endblock %}
 {% block content %}
+<style>
+  /* Scoped fix for this page: .field is a column-flex container, so
+     inside .form-grid its select/input can default to a content-based
+     min-width (driven by the widest طريقة الدفع option) and overflow
+     past the grid cell instead of respecting it. */
+  .form-grid .field select,
+  .form-grid .field input {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 42px !important;
+    box-sizing: border-box !important;
+  }
+</style>
 
 <div class="page-header" dir="rtl">
   <div>

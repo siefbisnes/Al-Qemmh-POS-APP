@@ -204,7 +204,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script data-page-script>
 // Isolated in its own <script> tag on purpose, separate from the
 // pywebview-bridge script below: an exception anywhere in one script
 // tag does not stop a later <script> tag from running, so if
@@ -281,7 +281,7 @@
 })();
 </script>
 
-<script>
+<script data-page-script>
 (function () {
   var windowSizePanel = document.getElementById("windowSizePanel");
   var websitePanel = document.getElementById("websiteAccessPanel");
@@ -646,7 +646,7 @@
 })();
 </script>
 
-<script>
+<script data-page-script>
 (function () {
   var btn = document.getElementById('changePasswordButton');
   if (!btn) return;

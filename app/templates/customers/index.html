@@ -1,24 +1,47 @@
 {% extends "base.html" %}
 {% block title %}العملاء - Al-Qemma{% endblock %}
 {% block content %}
+<style>
+  /* Force toolbar flexbox alignment and strictly clamp height to 42px */
+  .toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: flex-end !important;
+    gap: 15px !important;
+  }
+  .toolbar .field {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+  }
+  .toolbar .field input,
+  .toolbar .field select {
+    width: 100% !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    max-height: 42px !important;
+    box-sizing: border-box !important;
+  }
+</style>
 
 <div class="page-header" dir="rtl">
   <h1>العملاء</h1>
 </div>
 
 <form class="toolbar" method="get" dir="rtl">
-  <div class="field" style="margin:0;">
+  <div class="field" style="width: 380px;">
     <label>بحث</label>
     <input type="search" name="q" value="{{ search or '' }}" placeholder="ابحث باسم العميل أو رقم الهاتف أو المنتج أو المبلغ" />
   </div>
-  <div class="field" style="margin:0;">
+  <div class="field" style="width: 180px;">
     <label>الفلتر</label>
     <select name="filter">
       <option value="" {{ 'selected' if not filter_value }}>الكل</option>
       <option value="debtors" {{ 'selected' if filter_value == 'debtors' }}>مديونين</option>
     </select>
   </div>
-  <button type="submit" class="btn" style="align-self:flex-end;">تطبيق</button>
+  <button type="submit" class="btn" style="height: 42px;">تطبيق</button>
 </form>
 
 {% if customers %}

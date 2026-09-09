@@ -52,6 +52,7 @@ import webbrowser
 import urllib.error
 import urllib.parse
 import urllib.request
+import secrets
 
 from config import Config, BUNDLE_DIR
 
@@ -1401,13 +1402,17 @@ class ServerController:
     shutdown - used by AppAPI.exit_application() below.
     """
 
-    def __init__(self, host=HOST, port=PORT):
+    def __init__(self, host=HOST, port=PORT, desktop_mode=True):
         self.host = host
         self.port = port
+        self.desktop_mode = desktop_mode
+        self.desktop_quran_token = secrets.token_urlsafe(32) if desktop_mode else None
         self.app = None
         self.thread = None
         self._wsgi_server = None
         self.local_url = f"http://127.0.0.1:{port}/login"
+        if self.desktop_quran_token:
+            self.local_url += f"?desktop_token={urllib.parse.quote(self.desktop_quran_token)}"
 
         self._network_lock = threading.Lock()
         self._network_info = {
@@ -1425,6 +1430,7 @@ class ServerController:
     def create_app(self):
         from app import create_app
         self.app = create_app()
+        self.app.config["DESKTOP_QURAN_TOKEN"] = self.desktop_quran_token
         # Lets a Flask route (see app/routes/connectivity.py) read the same
         # cached status this class already pushes to the pywebview window
         # via window.evaluate_js - needed so plain-browser access (LAN/
@@ -2977,7 +2983,7 @@ def run_console_launcher():
         else:
             logger.info(message)
 
-    server = ServerController()
+    server = ServerController(desktop_mode=False)
     try:
         server.create_app()
     except Exception:
@@ -3219,7 +3225,7 @@ def main():
     # actually fixes "looks like unstyled HTML" on a fresh machine.
     ensure_webview2_runtime(logger)
 
-    server = ServerController()
+    server = ServerController(desktop_mode=True)
     settings = SettingsManager()
 
     width, height = _clamp_window_size(

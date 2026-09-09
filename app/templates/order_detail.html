@@ -107,6 +107,7 @@
 
   {% set stage_order = ['preparing', 'shipping', 'delivered'] %}
   {% set current_index = stage_order.index(order.status) if order.status in stage_order else -1 %}
+  {% set can_revert_to_shipping = order.status == 'delivered' and not order.financially_completed_at %}
 
   <div class="delivery-progress" id="deliveryProgress" data-status="{{ order.status }}">
     {% for stage, label in [('preparing', 'تجهيز الاوردر'), ('shipping', 'في الشحن'), ('delivered', 'وصل')] %}
@@ -116,6 +117,19 @@
       {% endif %}
       {% if order.status in ['not_delivered', 'cancelled'] %}
         <div class="delivery-stage locked">{{ label }}</div>
+      {% elif stage == 'shipping' and can_revert_to_shipping %}
+        <!-- وصل بالغلط: clicking "في الشحن" itself while delivered (and
+             payment not yet confirmed) reverts back to it - more
+             discoverable than a separate button, and the one exception
+             to "only the next stage forward is clickable". -->
+        <form method="post" action="{{ url_for('orders.revert_to_shipping', order_id=order.id) }}"
+              onsubmit="return confirm('التراجع عن حالة وصل والعودة إلى في التوصيل؟');"
+              style="flex:1 1 160px; min-width:140px;">
+          <button type="submit" class="delivery-stage done clickable"
+                  style="width:100%; border:2px solid var(--border); font:inherit;">
+            <span class="check-icon">✓</span>{{ label }}
+          </button>
+        </form>
       {% else %}
         <form method="post" action="{{ url_for('orders.advance', order_id=order.id) }}" style="flex:1 1 160px; min-width:140px;">
           <input type="hidden" name="status" value="{{ stage }}">
@@ -129,6 +143,10 @@
       {% endif %}
     {% endfor %}
   </div>
+
+  {% if can_revert_to_shipping %}
+  <p class="subtitle" style="margin-top:.5rem;">اضغط "في الشحن" أعلاه للتراجع عن حالة وصل بالغلط.</p>
+  {% endif %}
 
   {% if order.status not in ['not_delivered', 'cancelled', 'delivered'] %}
   <div class="delivery-terminal-actions">

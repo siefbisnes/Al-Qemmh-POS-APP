@@ -87,6 +87,19 @@ def advance(order_id):
     return redirect(url_for("orders.detail", order_id=order_id))
 
 
+@bp.route("/<int:order_id>/revert-to-shipping", methods=["POST"])
+def revert_to_shipping(order_id):
+    """يتراجع من وصل إلى في التوصيل - متاح فقط طالما لم يتم تأكيد
+    استلام الدفع بعد (order_service.revert_to_shipping يمنع ذلك أصلاً
+    إذا كان financially_completed_at موجودًا)."""
+    try:
+        order_service.revert_to_shipping(order_id)
+        flash("تم التراجع عن حالة الوصول — الاوردر الآن في التوصيل.", "success")
+    except order_service.OrderError as e:
+        flash(str(e), "error")
+    return redirect(url_for("orders.detail", order_id=order_id))
+
+
 @bp.route("/<int:order_id>/not-delivered", methods=["POST"])
 def not_delivered(order_id):
     try:

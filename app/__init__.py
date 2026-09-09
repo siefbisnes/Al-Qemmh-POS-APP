@@ -3,7 +3,8 @@ import hashlib
 import json
 import platform
 import uuid
-from flask import Flask, session
+import hmac
+from flask import Flask, session, request
 from config import Config, BUNDLE_DIR
 from app import db as db_module
 
@@ -27,6 +28,7 @@ def create_app(config_class=Config):
     register_template_helpers(app)
     register_auth_guard(app)
     register_no_cache_headers(app)
+    register_desktop_quran_access(app)
     register_changelog_routes(app)
     return app
 
@@ -49,6 +51,7 @@ def register_blueprints(app):
     from app.routes.notifications import bp as notifications_bp
     from app.routes.orders import bp as orders_bp
     from app.routes.diagnostics import bp as diagnostics_bp
+    from app.routes.quran import bp as quran_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
@@ -67,6 +70,7 @@ def register_blueprints(app):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(diagnostics_bp)
+    app.register_blueprint(quran_bp)
 
 
 def register_error_handlers(app):
@@ -116,6 +120,21 @@ def register_no_cache_headers(app):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        return response
+
+
+def register_desktop_quran_access(app):
+    @app.after_request
+    def _persist_desktop_quran_access(response):
+        expected_token = app.config.get("DESKTOP_QURAN_TOKEN")
+        request_token = request.args.get("desktop_token")
+        if expected_token and request_token and hmac.compare_digest(request_token, expected_token):
+            response.set_cookie(
+                "alqemma_desktop_quran",
+                request_token,
+                httponly=True,
+                samesite="Strict",
+            )
         return response
 
 

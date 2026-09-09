@@ -69,7 +69,7 @@ def add_provider(name):
 
 # ---------- creation (called from the checkout route) ----------
 
-def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost_source):
+def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost_source, sale_date=None):
     """Called right after sales_service.create_transaction() when the
     cashier checked طلب توصيل.
 
@@ -97,7 +97,22 @@ def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost
         This models "the shipping fee is paid from one bucket but the
         same amount is transferred over from the other to cover it" -
         a pure drawer↔online rebalancing, not a real second expense.
-    """
+
+    BUG FIX (order age used real INSERT time instead of the manually-
+    picked sale date): this previously always left created_at at the
+    orders table's own DEFAULT (datetime('now') at INSERT time), even
+    when the cashier had explicitly backdated/forward-dated the sale
+    via the "تاريخ البيع" field on the POS screen and passed it into
+    sales_service.create_transaction(sale_date=...). order_age_display()
+    was never the bug - it faithfully reads created_at - but that
+    column itself never reflected the chosen date, so "الايام من تكوين
+    هذه الاوردر" silently measured from real wall-clock time no matter
+    what date was picked. sale_date (same 'YYYY-MM-DD' string already
+    accepted by create_transaction) is now threaded through here too,
+    stored as '<sale_date> 00:00:00' so it stays comparable with
+    julianday() the same way a real timestamp is. Falls back to
+    SQLite's own datetime('now') exactly as before when no sale_date
+    was given (the normal, non-backdated case)."""
     delivery_provider = (delivery_provider or "").strip()
     if not delivery_provider:
         raise OrderError("اختر شركة الشحن.")
@@ -107,6 +122,8 @@ def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost
         raise OrderError("قيمة شحن الاوردر غير صحيحة.")
     if shipping_cost_source not in ("drawer", "online"):
         raise OrderError("اختر مصدر خصم قيمة الشحن.")
+
+    created_at = f"{sale_date} 00:00:00" if sale_date else None
 
     with db_cursor(commit=True) as cur:
         total_row = cur.execute(
@@ -140,16 +157,28 @@ def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost
             )
             shipping_offset_purchase_id = cur.lastrowid
 
-        cur.execute(
-            """INSERT INTO orders
-               (transaction_id, delivery_provider, status, order_amount,
-                shipping_cost, shipping_cost_source, shipping_purchase_id,
-                shipping_offset_purchase_id)
-               VALUES (?, ?, 'preparing', ?, ?, ?, ?, ?)""",
-            (transaction_id, delivery_provider, order_amount,
-             shipping_cost, shipping_cost_source, shipping_purchase_id,
-             shipping_offset_purchase_id),
-        )
+        if created_at:
+            cur.execute(
+                """INSERT INTO orders
+                   (transaction_id, delivery_provider, status, order_amount,
+                    shipping_cost, shipping_cost_source, shipping_purchase_id,
+                    shipping_offset_purchase_id, created_at)
+                   VALUES (?, ?, 'preparing', ?, ?, ?, ?, ?, ?)""",
+                (transaction_id, delivery_provider, order_amount,
+                 shipping_cost, shipping_cost_source, shipping_purchase_id,
+                 shipping_offset_purchase_id, created_at),
+            )
+        else:
+            cur.execute(
+                """INSERT INTO orders
+                   (transaction_id, delivery_provider, status, order_amount,
+                    shipping_cost, shipping_cost_source, shipping_purchase_id,
+                    shipping_offset_purchase_id)
+                   VALUES (?, ?, 'preparing', ?, ?, ?, ?, ?)""",
+                (transaction_id, delivery_provider, order_amount,
+                 shipping_cost, shipping_cost_source, shipping_purchase_id,
+                 shipping_offset_purchase_id),
+            )
         order_id = cur.lastrowid
         cur.execute(
             "INSERT INTO order_status_history (order_id, from_status, to_status) VALUES (?, NULL, 'preparing')",

@@ -1,0 +1,49 @@
+<!--
+  Paste this section into templates/settings.html, in the same place/
+  style as the app's other settings sections (e.g. next to the
+  Tailscale/connectivity block). It's self-contained and only needs
+  quran.css (already loaded globally from base.html) and
+  quran-settings.js (add a script tag for it in settings.html's
+  {% block scripts %}).
+-->
+<section id="quran-settings" class="card">
+  <h2>🎵 القرآن الكريم</h2>
+  <div class="quran-settings-box">
+
+    <div class="quran-settings-row">
+      <label for="quranAutoplayToggle">تشغيل القرآن تلقائيًا عند فتح البرنامج</label>
+      <label class="quran-toggle">
+        <input type="checkbox" id="quranAutoplayToggle">
+        <span class="quran-toggle-track"></span>
+      </label>
+    </div>
+
+    <div class="quran-settings-row">
+      <label for="quranDefaultReciterSelect">الشيخ الرئيسي</label>
+      <select id="quranDefaultReciterSelect"></select>
+    </div>
+
+    <div class="quran-settings-row">
+      <label for="quranVolumeSlider">مستوى الصوت</label>
+      <input type="range" id="quranVolumeSlider" min="0" max="100" value="20" style="accent-color: var(--accent);">
+    </div>
+
+    <div class="quran-settings-row">
+      <label for="quranRepeatToggle">تكرار قائمة التشغيل</label>
+      <label class="quran-toggle">
+        <input type="checkbox" id="quranRepeatToggle">
+        <span class="quran-toggle-track"></span>
+      </label>
+    </div>
+
+    <div class="quran-settings-row">
+      <label for="quranFolderInput">مجلد القرآن</label>
+      <div style="display:flex; gap:.5rem; flex:1 1 auto; justify-content:flex-end;">
+        <input type="text" id="quranFolderInput" style="flex:1 1 auto; min-width:180px;">
+        <button type="button" class="btn btn-sm" id="quranFolderSaveBtn">حفظ</button>
+      </div>
+    </div>
+    <p class="subtitle" id="quranFolderStatus"></p>
+
+  </div>
+</section>
