@@ -1410,6 +1410,8 @@ class ServerController:
         self.app = None
         self.thread = None
         self._wsgi_server = None
+        self.quran_window = None
+        self.quran_api = None
         self.local_url = f"http://127.0.0.1:{port}/login"
         if self.desktop_quran_token:
             self.local_url += f"?desktop_token={urllib.parse.quote(self.desktop_quran_token)}"
@@ -1438,7 +1440,6 @@ class ServerController:
         # app) can poll for it over HTTP instead, since evaluate_js only
         # reaches the native window and has no effect on a separate browser.
         self.app.config["SERVER_CONTROLLER"] = self
-
         # Dev convenience only: normal (packaged/production) runs use
         # debug=False everywhere, which makes Jinja compile each
         # template once and cache it in memory for the process's whole
@@ -1454,6 +1455,76 @@ class ServerController:
             self.app.jinja_env.auto_reload = True
 
         return self.app
+
+    def open_quran_player(self):
+        if not HAS_GUI or not self.desktop_quran_token:
+            return False
+        if self.quran_window is not None:
+            try:
+                self.quran_window.restore()
+                self.quran_window.focus()
+                return True
+            except Exception:
+                self.quran_window = None
+
+        url = self.quran_player_url()
+        try:
+            self.quran_window = webview.create_window(
+                "القرآن الكريم", url, width=560, height=720,
+                min_size=(420, 500), resizable=True, js_api=self.quran_api,
+            )
+            self.quran_window.events.closing += self._stop_before_quran_close
+            self.quran_window.events.closed += self._clear_quran_window
+            return True
+        except Exception:
+            self.quran_window = None
+            return False
+
+    def _stop_before_quran_close(self):
+        # Do not call evaluate_js() or SQLite synchronously from pywebview's
+        # closing callback. Both can block the GUI event loop and freeze the
+        # main POS window while the secondary webview is being destroyed.
+        threading.Thread(target=self.stop_quran_playback, daemon=True).start()
+        return True
+
+    def quran_player_url(self):
+        if not self.desktop_quran_token:
+            return None
+        return (
+            f"http://127.0.0.1:{self.port}/quran/player?desktop_token="
+            f"{urllib.parse.quote(self.desktop_quran_token)}"
+        )
+
+    def _clear_quran_window(self):
+        self.quran_window = None
+
+    def stop_quran_playback(self):
+        try:
+            from app.services import quran as quran_service
+            with self.app.app_context():
+                quran_service.update_settings(last_playing=False, last_position=0)
+        except Exception as exc:
+            if self.app is not None:
+                self.app.logger.warning("Could not persist Quran stop state: %s", exc)
+
+    def should_auto_open_quran(self):
+        if self.app is None:
+            return False
+        try:
+            from app.services import quran as quran_service
+            with self.app.app_context():
+                return bool(quran_service.get_settings()["autoplay"])
+        except Exception:
+            return False
+
+    def close_quran_player(self):
+        if self.quran_window is None:
+            return
+        try:
+            self.quran_window.destroy()
+        except Exception:
+            pass
+        self.quran_window = None
 
     def start(self, log_callback=None):
         """Starts the Flask server in a background thread. Raises whatever
@@ -1734,6 +1805,8 @@ def graceful_shutdown(server, settings, backup_manager, logger, guard, reason=""
 
     logger.info(f"Shutting down ({reason}).")
 
+    server.close_quran_player()
+
     if settings.get("auto_backup_on_close", False):
         destination = settings.get("backup_destination") or DEFAULT_BACKUP_DIR
         ok, message = backup_manager.run_backup(destination)
@@ -1899,6 +1972,15 @@ class AppAPI:
         self._win_key_hook = None
         self._win_key_hook_proc = None
         self._color_test_window = None
+
+    def open_quran_player(self):
+        """Open or focus the standalone Quran media-player window."""
+        return self._server.open_quran_player()
+
+    def stop_quran_playback(self):
+        """Persist a stopped state when the separate player is closed."""
+        self._server.stop_quran_playback()
+        return True
 
     # ---- Hardware diagnostics: keyboard test ----
     def suppress_windows_key(self, enable):
@@ -2959,6 +3041,11 @@ def _startup_sequence(window, server, logger):
     except Exception as exc:
         logger.error(f"Could not redirect the window to the app: {exc}")
 
+    if server.open_quran_player():
+        logger.info("Quran Player: launched separate window")
+    else:
+        logger.error("Quran Player: failed to launch separate window")
+
     # Kicked off last, after the window has already redirected into the
     # real app - LAN detection is instant, but Tailscale is a subprocess
     # call, and even with its own internal timeout there's no reason to
@@ -2983,7 +3070,10 @@ def run_console_launcher():
         else:
             logger.info(message)
 
-    server = ServerController(desktop_mode=False)
+    # Keep the desktop token in browser fallback mode too. It protects the
+    # standalone player route and lets the POS and Quran player open as two
+    # separate browser windows when native pywebview is unavailable.
+    server = ServerController(desktop_mode=True)
     try:
         server.create_app()
     except Exception:
@@ -3003,7 +3093,11 @@ def run_console_launcher():
     if not wait_for_server(server.host, server.port, timeout=10):
         log("The server did not respond in time.", level="error")
 
-    threading.Thread(target=lambda: webbrowser.open(server.local_url), daemon=True).start()
+    threading.Thread(target=lambda: webbrowser.open_new(server.local_url), daemon=True).start()
+    quran_url = server.quran_player_url()
+    if quran_url:
+        threading.Thread(target=lambda: webbrowser.open_new(quran_url), daemon=True).start()
+        print(" Quran Player: launching separate window")
 
     # No pywebview window in console mode, so this only logs status (see
     # the `window is not None` guard in _connectivity_loop) - still useful
@@ -3034,6 +3128,26 @@ def _gui_available():
     if sys.platform not in ("win32", "darwin") and not os.environ.get("DISPLAY"):
         print("[Al-Qemma] No display detected (DISPLAY is not set) - falling back to console mode.")
         return False
+    if sys.platform == "linux":
+        try:
+            import importlib
+            gi = importlib.import_module("gi")
+            gi.require_version("Gtk", "3.0")
+            importlib.import_module("gi.repository.Gtk")
+            webkit_ready = False
+            for webkit_version in ("4.1", "4.0"):
+                try:
+                    gi.require_version("WebKit2", webkit_version)
+                    importlib.import_module("gi.repository.WebKit2")
+                    webkit_ready = True
+                    break
+                except (ImportError, ValueError):
+                    continue
+            if not webkit_ready:
+                raise ImportError("WebKit2 4.1/4.0 is unavailable")
+        except (ImportError, ValueError):
+            print("[Al-Qemma] No GTK backend is installed for pywebview - using browser windows.")
+            return False
     return True
 
 
@@ -3250,6 +3364,7 @@ def main():
         window=None, server=server, settings=settings, logger=logger,
         shutdown_guard=shutdown_guard, backup_manager=backup_manager,
     )
+    server.quran_api = api
 
     window = webview.create_window(
         WINDOW_TITLE,

@@ -23,26 +23,11 @@ def require_desktop_access():
         abort(404)
 
 
-@bp.route("/")
-def index():
+@bp.route("/player")
+def player():
     reciters = quran_service.get_reciters()
     settings = quran_service.get_settings()
-    return render_template("quran.html", reciters=reciters, quran_settings=settings)
-
-
-@bp.route("/reciter/<reciter_id>")
-def reciter_detail(reciter_id):
-    reciter = quran_service.get_reciter(reciter_id)
-    if not reciter:
-        abort(404)
-    return render_template("quran_reciter.html", reciter=reciter)
-
-
-@bp.route("/settings")
-def settings_page():
-    reciters = quran_service.get_reciters()
-    settings = quran_service.get_settings()
-    return render_template("quran_settings.html", reciters=reciters, quran_settings=settings)
+    return render_template("quran_player.html", reciters=reciters, quran_settings=settings)
 
 
 @bp.route("/api/library")
@@ -102,10 +87,7 @@ def api_folder():
 
 @bp.route("/api/state", methods=["GET", "POST"])
 def api_state():
-    """Persists/returns the "what was playing" resume state, used both
-    for Auto Start on launch and for resuming playback (from the same
-    position) after navigating to another tab in this multi-page app -
-    see quran-player.js, loaded globally from base.html."""
+    """Persists and returns playback state for the separate player window."""
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         allowed = {"last_reciter", "last_surah", "last_position", "last_playing"}

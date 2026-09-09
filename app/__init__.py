@@ -235,6 +235,20 @@ def register_auth_guard(app):
         if request.endpoint.startswith("diagnostics."):
             return
 
+        # The standalone Quran player is a separate desktop window. Its
+        # one-time desktop token is its authentication boundary, so it must
+        # be able to open alongside the login screen without exposing Quran
+        # routes to ordinary browser requests.
+        if request.endpoint.startswith("quran."):
+            expected_token = app.config.get("DESKTOP_QURAN_TOKEN")
+            request_token = request.args.get("desktop_token")
+            cookie_token = request.cookies.get("alqemma_desktop_quran")
+            if expected_token and (
+                hmac.compare_digest(request_token or "", expected_token)
+                or hmac.compare_digest(cookie_token or "", expected_token)
+            ):
+                return
+
         if not session.get("logged_in"):
             session.clear()
             return redirect(url_for("auth.login"))

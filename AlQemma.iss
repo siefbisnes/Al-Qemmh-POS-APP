@@ -5,11 +5,12 @@
 ; (or any GUID generator) and keep this exact value for all future builds.
 AppId={{A1E2C9F0-6B3D-4C7A-9A1E-2C9F06B3D4C7}
 AppName=AlQemma
-AppVersion=1.0.0
+AppVersion=4.7.7
 DefaultGroupName=AlQemma
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename=AlQemma_Setup
+OutputDir=installer
 DisableProgramGroupPage=no
 UninstallDisplayIcon={app}\AlQemma.exe
 ; Shows an "I accept the agreement" / "I do not accept" page before
@@ -41,7 +42,6 @@ Name: "full"; Description: "Full installation"
 ; the user sees exactly what's being installed but can't uncheck any of
 ; them. This is the mechanism you asked for.
 Name: "main";       Description: "AlQemma Program";                Types: full; Flags: fixed
-Name: "vcredist";    Description: "Visual C++ Redistributable";     Types: full; Flags: fixed
 
 [Files]
 ; Core app, including the bundled Noto Naskh Arabic font used for PDF
@@ -50,9 +50,9 @@ Name: "vcredist";    Description: "Visual C++ Redistributable";     Types: full;
 Source: "Program\*"; DestDir: "{app}"; \
     Flags: ignoreversion recursesubdirs createallsubdirs; Components: main
 
-; VC++ Redistributable, bundled and run silently during setup, then removed.
-; Sits at the project root alongside AlQemma.iss.
-Source: "VC_redist.x86.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Components: vcredist
+; VC++ Redistributable is supplied by the builder and offered as an optional
+; final installer action. It is deliberately not installed automatically.
+Source: "VC_redist.x86.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\AlQemma"; Filename: "{app}\AlQemma.bat"; IconFilename: "{app}\AlQemma.exe"
@@ -62,7 +62,5 @@ Name: "{userdesktop}\AlQemma"; Filename: "{app}\AlQemma.bat"; IconFilename: "{ap
 ; /install /quiet /norestart is the standard silent switch set for the
 ; Visual C++ Redistributable bootstrapper (vcredist doesn't use vscode-style
 ; /verysilent flags).
-Filename: "{tmp}\VC_redist.x86.exe"; Parameters: "/install /quiet /norestart"; \
-    Components: vcredist; Flags: waituntilterminated; StatusMsg: "Installing Visual C++ Redistributable..."
-
-Filename: "{app}\AlQemma.bat"; Description: "Launch AlQemma"; Flags: postinstall skipifsilent
+Filename: "{app}\AlQemma.bat"; Description: "Launch AlQemma"; Flags: postinstall skipifsilent nowait
+Filename: "{tmp}\VC_redist.x86.exe"; Description: "Install Microsoft Visual C++ Redistributable"; Parameters: "/install /quiet /norestart"; Flags: postinstall skipifsilent unchecked waituntilterminated; StatusMsg: "Installing Visual C++ Redistributable..."

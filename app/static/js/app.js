@@ -44,7 +44,7 @@ function setupPersistentNavigation() {
 function executePageScripts(doc) {
   doc.querySelectorAll("script[src]").forEach((source) => {
     const src = new URL(source.src, window.location.href).href;
-    if (src.endsWith("/js/app.js") || src.endsWith("/js/quran-player.js")) return;
+    if (src.endsWith("/js/app.js")) return;
     const script = document.createElement("script");
     script.src = src;
     document.body.appendChild(script);

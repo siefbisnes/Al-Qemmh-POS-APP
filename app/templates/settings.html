@@ -18,6 +18,13 @@
     </div>
 
     <div class="panel">
+      <h2>مشغل القرآن</h2>
+      <p class="subtitle">يفتح في نافذة مستقلة بجانب التطبيق.</p>
+      <button type="button" class="btn btn-primary" id="openQuranPlayerButton">فتح مشغل القرآن</button>
+      <span class="hint" id="quranPlayerStatus"></span>
+    </div>
+
+    <div class="panel">
       <h2>الإعدادات العامة</h2>
       <form method="post">
         <div class="field">
@@ -284,11 +291,30 @@
 <script data-page-script>
 (function () {
   var windowSizePanel = document.getElementById("windowSizePanel");
+  var openQuranPlayerButton = document.getElementById("openQuranPlayerButton");
+  var quranPlayerStatus = document.getElementById("quranPlayerStatus");
   var websitePanel = document.getElementById("websiteAccessPanel");
   var logPanel = document.getElementById("logViewerPanel");
   var backupPanel = document.getElementById("backupExitPanel");
   var hardwareTestPanel = document.getElementById("hardwareTestPanel");
   var desktopOnlyNote = document.getElementById("desktopOnlyNote");
+
+  if (openQuranPlayerButton) {
+    openQuranPlayerButton.addEventListener("click", function () {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.open_quran_player) {
+        openQuranPlayerButton.disabled = true;
+        window.pywebview.api.open_quran_player().then(function (ok) {
+          quranPlayerStatus.textContent = ok ? "تم فتح نافذة القرآن." : "تعذر فتح نافذة القرآن.";
+          openQuranPlayerButton.disabled = false;
+        }).catch(function () {
+          quranPlayerStatus.textContent = "تعذر فتح نافذة القرآن.";
+          openQuranPlayerButton.disabled = false;
+        });
+      } else {
+        quranPlayerStatus.textContent = "متاح من تطبيق سطح المكتب فقط.";
+      }
+    });
+  }
 
   function showDesktopOnlyNote() {
     desktopOnlyNote.hidden = false;

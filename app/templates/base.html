@@ -188,7 +188,6 @@
 </script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/customers.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/quran.css') }}">
 <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
 <meta name="theme-color" content="#0b2f4f">
 
@@ -297,7 +296,6 @@
         <div class="nav-plain">
           <a href="{{ url_for('categories.index') }}" class="nav-link {{ 'is-active' if request.endpoint and request.endpoint.startswith('categories.') }}">الأقسام</a>
           <a href="{{ url_for('settings.index') }}" class="nav-link {{ 'is-active' if request.endpoint and request.endpoint.startswith('settings.') }}">الإعدادات</a>
-          <a href="{{ url_for('quran.index') }}" class="nav-link {{ 'is-active' if request.endpoint and request.endpoint.startswith('quran.') }}">القرآن الكريم</a>
         </div>
       </details>
     </nav>
@@ -350,12 +348,7 @@
   </main>
 </div>
 
-<!-- The audio element is the persistent Quran service. It has no visible UI;
-     controls are rendered only by Quran page templates. -->
-<audio id="quranAudioEl" preload="metadata" hidden></audio>
-
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-<script src="{{ url_for('static', filename='js/quran-player.js') }}"></script>
 <script>
   const vapidPublicKey = "{{ config.VAPID_PUBLIC_KEY | e }}";
   const serviceWorkerUrl = "{{ url_for('static', filename='sw.js') }}";

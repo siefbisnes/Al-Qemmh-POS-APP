@@ -1,10 +1,9 @@
 # Building Al-Qemma as a Windows .exe
 
-This turns the website into something a shop employee can run by double-
-clicking, with no "open a terminal and type python run.py" step. It still
-runs as a local website under the hood (open in the browser, same as
-before) - the .exe just starts that server for you and opens the browser
-automatically.
+This builds a portable `Program` folder and an `AlQemma_Setup.exe` installer.
+The package includes the Python runtime, application files, and standalone
+Quran player UI. Quran audio is intentionally not included; the shop can add
+its own Quran folder after installation.
 
 **Important:** this has to be built ON Windows. PyInstaller bundles the
 actual Python interpreter and native libraries for whatever operating
@@ -23,10 +22,8 @@ directly on the shop's own Windows computer.
    ```
    pip install -r requirements.txt
    ```
-4. Install Playwright's browser (needed for PDF export):
-   ```
-   playwright install chromium
-   ```
+4. Place these offline payloads in the project: `vendor/MicrosoftEdgeWebView2RuntimeInstallerX64.exe`, `VC_redist.x86.exe`, and `vendor/tailscale-setup-latest-amd64.exe`.
+5. Install Inno Setup and make sure `iscc.exe` is on `PATH`.
 
 ## 2. Build the .exe
 
@@ -35,8 +32,8 @@ Run the build script:
 build_exe.bat
 ```
 
-This runs PyInstaller once for the main app and collects everything into
-`dist\AlQemma\`.
+This runs PyInstaller and then invokes Inno Setup to create
+`installer\AlQemma_Setup.exe`.
 
 If you'd rather run the steps yourself instead of the .bat file:
 ```
@@ -48,8 +45,11 @@ copy dist\AlQemma.exe dist\AlQemma\
 ## 3. What you get
 
 ```
-dist\AlQemma\
-└── AlQemma.exe                          <- double-click this to run it
+Program\
+├── AlQemma.exe
+├── AlQemma.bat
+installer\
+└── AlQemma_Setup.exe                    <- distributable installer
 ```
 
 Copy this whole `AlQemma` folder anywhere with write permission - the

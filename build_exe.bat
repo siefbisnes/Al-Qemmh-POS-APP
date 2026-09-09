@@ -19,6 +19,8 @@ if not exist "%SCRIPT_DIR%vendor\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" (
     goto :error
 )
 
+if not exist "%SCRIPT_DIR%vendor\tailscale-setup-latest-amd64.exe" if exist "%SCRIPT_DIR%vendor\tailscale-setup-1.102.3.exe" copy /Y "%SCRIPT_DIR%vendor\tailscale-setup-1.102.3.exe" "%SCRIPT_DIR%vendor\tailscale-setup-latest-amd64.exe" >nul
+
 if not exist "%SCRIPT_DIR%vendor\tailscale-setup-latest-amd64.exe" (
     echo.
     echo ERROR: vendor\tailscale-setup-latest-amd64.exe is missing.
@@ -57,12 +59,29 @@ echo   echo AlQemma.exe not found. >> "%OUTPUT_DIR%\AlQemma.bat"
 echo   pause >> "%OUTPUT_DIR%\AlQemma.bat"
 echo ) >> "%OUTPUT_DIR%\AlQemma.bat"
 
+where iscc >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo WARNING: Inno Setup Compiler was not found. Program package was built,
+    echo but AlQemma_Setup.exe was not created. Install Inno Setup and rerun.
+    goto :complete
+)
+
+echo.
+echo === Creating installer ===
+iscc "%SCRIPT_DIR%AlQemma.iss"
+if errorlevel 1 goto :error
+
 echo.
 echo =====================================================
 echo Build complete.
 echo The final package is in: Program\
 echo Run AlQemma.bat from that folder.
+echo The installer is in: installer\AlQemma_Setup.exe
 echo =====================================================
+goto :complete
+
+:complete
 goto :end
 
 :error

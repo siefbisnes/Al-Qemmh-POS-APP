@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>القرآن الكريم</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/quran_player.css') }}">
+</head>
+<body>
+  <main class="player-shell">
+    <header class="player-header">
+      <div>
+        <p class="eyebrow">مكتبة صوتية محلية</p>
+        <h1>القرآن الكريم</h1>
+      </div>
+      <div class="header-actions">
+        <button class="icon-button" id="refreshLibrary" title="تحديث المكتبة" aria-label="تحديث المكتبة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5"></path><path d="M20 4v7h-7"></path></svg></button>
+        <button class="icon-button" id="settingsToggle" title="الإعدادات" aria-label="الإعدادات"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"></path><path d="m19.4 15 .1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.8 1.2v.1a2 2 0 1 1-4 0V19a1.7 1.7 0 0 0-2.8-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3.1 12a1.7 1.7 0 0 0-1.2-2.8h-.1a2 2 0 1 1 0-4H2a1.7 1.7 0 0 0 1.2-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.8 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 20.9 10h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path></svg></button>
+      </div>
+    </header>
+
+    <section class="library-view" id="libraryView">
+      <div class="section-heading">
+        <div>
+          <h2>القراء</h2>
+          <p>اختر قارئًا لاستعراض السور المتاحة</p>
+        </div>
+        <label class="search-box">
+          <span aria-hidden="true">⌕</span>
+          <input id="librarySearch" type="search" placeholder="ابحث عن قارئ..." autocomplete="off">
+        </label>
+      </div>
+      <div class="reciter-grid" id="reciterGrid"></div>
+      <div class="empty-state" id="libraryEmpty" hidden>
+        <div class="empty-icon">♫</div>
+        <h2>لا توجد تلاوات</h2>
+        <p>أضف مجلدات القراء إلى مجلد القرآن ثم حدّث المكتبة.</p>
+        <button class="button button-primary" id="emptyRefresh">تحديث المكتبة</button>
+      </div>
+    </section>
+
+    <section class="playlist-view" id="playlistView" hidden>
+      <button class="back-button" id="backToLibrary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg><span>القراء</span></button>
+      <div class="playlist-heading">
+        <div class="reciter-mark">♫</div>
+        <div><h2 id="playlistTitle">—</h2><p id="playlistCount">—</p></div>
+      </div>
+      <label class="search-box playlist-search"><span aria-hidden="true">⌕</span><input id="playlistSearch" type="search" placeholder="ابحث عن سورة..." autocomplete="off"></label>
+      <div class="track-list" id="trackList"></div>
+    </section>
+
+    <section class="settings-panel" id="settingsPanel" hidden>
+      <div class="panel-heading"><h2>إعدادات القرآن</h2><button class="icon-button" id="settingsClose" aria-label="إغلاق">×</button></div>
+      <label class="setting-row"><span>تشغيل مشغل القرآن تلقائيًا مع التطبيق</span><input type="checkbox" id="autoplaySetting"></label>
+      <label class="setting-row"><span>القارئ الرئيسي</span><select id="reciterSetting"></select></label>
+      <label class="setting-row"><span>مستوى الصوت</span><input type="range" id="volumeSetting" min="0" max="100" value="20"></label>
+      <label class="setting-row"><span>التكرار</span><select id="repeatSetting"><option value="off">بدون تكرار</option><option value="track">تكرار السورة</option><option value="playlist">تكرار القائمة</option></select></label>
+      <label class="setting-row setting-folder"><span>مجلد القرآن</span><input type="text" id="folderSetting" placeholder="مسار مجلد القرآن"><button class="button" id="saveFolder">حفظ</button></label>
+      <p class="setting-status" id="settingStatus"></p>
+    </section>
+
+    <section class="now-playing" id="nowPlaying">
+      <div class="now-playing-info" id="idleInfo"><div class="now-icon">♫</div><div><strong>لا توجد تلاوة قيد التشغيل</strong><span>اختر قارئًا أو سورة لبدء التشغيل</span></div></div>
+      <div class="now-playing-info" id="activeInfo" hidden><div class="now-icon active">♫</div><div><strong id="currentSurah">—</strong><span id="currentReciter">—</span></div></div>
+      <div class="controls">
+        <div class="transport"><button class="control-button" id="previousTrack" aria-label="السابق" title="السابق"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"></path></svg></button><button class="control-button primary" id="togglePlayback" aria-label="تشغيل" title="تشغيل"><svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg><svg id="pauseIcon" viewBox="0 0 24 24" hidden><path d="M6 5h4v14H6zm8 0h4v14h-4z"></path></svg></button><button class="control-button" id="stopPlayback" aria-label="إيقاف" title="إيقاف"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg></button><button class="control-button" id="nextTrack" aria-label="التالي" title="التالي"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 6l8.5 6L6 18z"></path></svg></button></div>
+        <div class="progress-row"><span id="currentTime">٠:٠٠</span><input id="progress" type="range" min="0" max="1000" value="0"><span id="duration">٠:٠٠</span></div>
+      </div>
+      <label class="volume-control" title="مستوى الصوت"><span>🔊</span><input id="volume" type="range" min="0" max="100" value="20" aria-label="مستوى الصوت"></label>
+    </section>
+  </main>
+  <audio id="audio" preload="auto" playsinline></audio>
+  <script src="{{ url_for('static', filename='js/quran_player.js') }}"></script>
+</body>
+</html>
