@@ -47,7 +47,7 @@ The JavaScript package manifest currently provides Playwright test tooling but d
 - Open warranty and compatibility workflows.
 - Add an expense and verify dashboard/report visibility.
 - Open reports and generate a printable/PDF output if Chromium is installed.
-- Open settings, branding, diagnostics, and connectivity pages.
+- Open settings, branding, and connectivity pages.
 - Test a backup operation and confirm the output is stored outside source control.
 - Confirm a missing route renders the 404 page and that a server error is logged/rendered through the 500 handler.
 

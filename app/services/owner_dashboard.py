@@ -153,6 +153,22 @@ def _sum_table_by_bucket(table, date_col, amount_col, date_from, date_to, bucket
     return data
 
 
+def _sum_adjustments_by_bucket(target, date_from, date_to, bucket):
+    """Group manual admin adjustments into the same buckets as charts."""
+    data = {}
+    with db_cursor() as cur:
+        rows = cur.execute(
+            """SELECT adjustment_date AS d, amount
+               FROM manual_adjustments
+               WHERE target = ? AND adjustment_date >= ? AND adjustment_date <= ?""",
+            (target, date_from, date_to),
+        ).fetchall()
+    for row in rows:
+        key = _bucket_key(row["d"], bucket)
+        data[key] = data.get(key, 0.0) + float(row["amount"] or 0)
+    return data
+
+
 def profit_revenue_series(date_from, date_to, bucket):
     """Revenue vs Net Profit over time.
 
@@ -169,6 +185,7 @@ def profit_revenue_series(date_from, date_to, bucket):
     sales = _sum_sales_by_bucket(date_from, date_to, bucket)
     expenses = _sum_table_by_bucket("expenses", "expense_date", "amount", date_from, date_to, bucket)
     writeoff_costs = writeoff_service.amortization_by_bucket(date_from, date_to, bucket)
+    manual_profit = _sum_adjustments_by_bucket("net_profit", date_from, date_to, bucket)
     buckets = _empty_buckets(date_from, date_to, bucket)
 
     labels, revenue, net_profit = [], [], []
@@ -178,7 +195,7 @@ def profit_revenue_series(date_from, date_to, bucket):
         cogs = cell.get("cogs", 0.0)
         exp = expenses.get(key, 0.0)
         wo = writeoff_costs.get(key, 0.0)
-        profit = rev - cogs - exp - wo
+        profit = rev - cogs - exp - wo + manual_profit.get(key, 0.0)
         labels.append(_label_for_bucket(key, bucket))
         revenue.append(round(rev, 2))
         net_profit.append(round(profit, 2))
@@ -247,6 +264,7 @@ def purchases_vs_expected(date_from, date_to, bucket):
     """
     buckets = _empty_buckets(date_from, date_to, bucket)
     recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", date_from, date_to, bucket)
+    manual_purchases = _sum_adjustments_by_bucket("purchases", date_from, date_to, bucket)
 
     bucket_keys = list(buckets.keys())
     expected_by_bucket = _expected_returns_by_bucket(date_from, date_to, bucket, bucket_keys)
@@ -265,7 +283,7 @@ def purchases_vs_expected(date_from, date_to, bucket):
             },
             {
                 "label": "المباع",
-                "data": [round(recorded.get(k, 0.0), 2) for k in bucket_keys],
+                "data": [round(recorded.get(k, 0.0) + manual_purchases.get(k, 0.0), 2) for k in bucket_keys],
                 "backgroundColor": "rgba(96, 165, 250, 0.65)",
                 "borderRadius": 6,
             },
@@ -401,6 +419,7 @@ def kpis(date_from, date_to):
     Potential Net Profit = Total Revenue - Total COGS - Expenses - Writeoff cost
     """
     from app.services import writeoffs as writeoff_service
+    from app.services import adjustments as adjustment_service
 
     # Total sales data
     sales = _sum_sales_by_bucket(date_from, date_to, "day")
@@ -457,6 +476,7 @@ def kpis(date_from, date_to):
 
     expenses = float(expenses or 0)
     purchases = float(purchases or 0)
+    purchases += float(adjustment_service.adjustment_total("purchases", date_from, date_to) or 0)
     # Net Profit uses the amortized (12-month spread) spoilage installment
     # due in [date_from, date_to], NOT the full write-off cost - custom
     # client-requested override, see
@@ -474,6 +494,9 @@ def kpis(date_from, date_to):
 
     # Potential net profit: from all sales including unpaid debt
     potential_net_profit = total_revenue - total_cogs - expenses - writeoff_cost
+    net_profit_adjustment = float(adjustment_service.adjustment_total("net_profit", date_from, date_to) or 0)
+    realized_net_profit += net_profit_adjustment
+    potential_net_profit += net_profit_adjustment
 
     # Outstanding debt
     outstanding_debt = total_revenue - realized_revenue

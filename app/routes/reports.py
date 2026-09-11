@@ -93,7 +93,8 @@ def index():
         today_total=today_only_report["today_total"],
         range_summary=range_summary,
         ledger_entries=ledger_entries,
-        adjustment_targets=adjustment_service.TARGETS,
+        adjustment_targets=(adjustment_service.TARGETS if session.get("role") == "admin"
+                else [("drawer", "الدرج"), ("online", "أونلاين")]),
         date_from=date_from,
         date_to=date_to,
         reset_at=reset_at,
@@ -106,6 +107,8 @@ def index():
 @bp.route("/adjust", methods=["POST"])
 def adjust():
     target = request.form.get("target")
+    if session.get("role") != "admin" and target not in {"drawer", "online"}:
+        abort(403)
     kind = request.form.get("kind", "add")
     amount = request.form.get("amount", type=float)
     note = request.form.get("note", "")

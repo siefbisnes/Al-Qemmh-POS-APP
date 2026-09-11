@@ -134,21 +134,11 @@
 
       <article class="ra-chart-card">
         <div class="ra-chart-head">
-          <h3>مشتريات المخزون مقابل العائد المتوقع</h3>
-          <span>Cost vs expected sell value</span>
+          <h3>مشتريات المخزون وقيمة المنتجات مقابل العائد المتوقع</h3>
+          <span>Cost, products value vs expected sell value</span>
         </div>
         <div class="ra-chart-wrap tall">
           <canvas id="chartPurchases" aria-label="Purchases vs expected returns chart"></canvas>
-        </div>
-      </article>
-
-      <article class="ra-chart-card">
-        <div class="ra-chart-head">
-          <h3>قيمة المنتجات</h3>
-          <span>Σ purchase price across products</span>
-        </div>
-        <div class="ra-chart-wrap stack">
-          <canvas id="chartProductsValue" aria-label="Total products purchase value chart"></canvas>
         </div>
       </article>
 
@@ -201,8 +191,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
+<script data-page-script>
+(function () {
     const toggle = document.getElementById('toggleReportsDetails');
     const card = document.getElementById('reportsDetailsCard');
     if (toggle && card) {
@@ -218,10 +208,10 @@
         panel.style.display = panel.style.display === 'none' ? '' : 'none';
       });
     }
-  });
+})();
 </script>
 {% if is_admin %}
-<script>
+<script data-page-script>
   window.REPORTS_ANALYTICS_CONFIG = {
     apiUrl: {{ url_for('reports.analytics_api') | tojson }},
     defaultTimeframe: {{ default_timeframe | tojson }}

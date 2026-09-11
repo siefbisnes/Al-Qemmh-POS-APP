@@ -13,7 +13,6 @@ This page is a code-oriented map of the application. The route list describes th
 | `connectivity.py` | Connectivity/status checks used by the UI |
 | `customers.py` | Customer list, detail, purchase history, and customer actions |
 | `dashboard.py` | Main dashboard and summary views |
-| `diagnostics.py` | Health/diagnostic information for local troubleshooting |
 | `expenses.py` | Expense entry and expense views |
 | `media.py` | Media/product-image serving and related file operations |
 | `notifications.py` | Notification subscription and notification-related endpoints |

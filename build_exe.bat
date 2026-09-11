@@ -8,6 +8,7 @@ REM Run this from the project folder, after "pip install -r requirements.txt".
 set SCRIPT_DIR=%~dp0
 set OUTPUT_DIR=%SCRIPT_DIR%Program
 set APP_EXE=%OUTPUT_DIR%\AlQemma.exe
+set ISCC_EXE=
 
 if not exist "%SCRIPT_DIR%vendor\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" (
     echo.
@@ -28,6 +29,15 @@ if not exist "%SCRIPT_DIR%vendor\tailscale-setup-latest-amd64.exe" (
     echo   https://tailscale.com/download/windows
     echo rename it to tailscale-setup-latest-amd64.exe and save it at that
     echo path before building - see BUILD_EXE.md.
+    echo.
+    goto :error
+)
+
+if not exist "%SCRIPT_DIR%VC_redist.x86.exe" (
+    echo.
+    echo ERROR: VC_redist.x86.exe is missing from the project folder.
+    echo Download the Microsoft Visual C++ Redistributable and save it as:
+    echo   %SCRIPT_DIR%VC_redist.x86.exe
     echo.
     goto :error
 )
@@ -59,18 +69,33 @@ echo   echo AlQemma.exe not found. >> "%OUTPUT_DIR%\AlQemma.bat"
 echo   pause >> "%OUTPUT_DIR%\AlQemma.bat"
 echo ) >> "%OUTPUT_DIR%\AlQemma.bat"
 
+REM Locate Inno Setup even when ISCC.exe was installed without being added
+REM to PATH. The installer step is part of this build and must run after
+REM PyInstaller succeeds; it is not optional.
 where iscc >nul 2>&1
-if errorlevel 1 (
+if not errorlevel 1 set ISCC_EXE=iscc
+if not defined ISCC_EXE if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set ISCC_EXE=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe
+if not defined ISCC_EXE if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set ISCC_EXE=%ProgramFiles%\Inno Setup 6\ISCC.exe
+if not defined ISCC_EXE if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set ISCC_EXE=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
+
+if not defined ISCC_EXE (
     echo.
-    echo WARNING: Inno Setup Compiler was not found. Program package was built,
-    echo but AlQemma_Setup.exe was not created. Install Inno Setup and rerun.
-    goto :complete
+    echo ERROR: Inno Setup Compiler was not found.
+    echo Install Inno Setup 6, then rerun this build. The setup EXE cannot
+    echo be created until ISCC.exe is available.
+    goto :error
 )
 
 echo.
 echo === Creating installer ===
-iscc "%SCRIPT_DIR%AlQemma.iss"
+if exist "%SCRIPT_DIR%installer\AlQemma_Setup.exe" del /q "%SCRIPT_DIR%installer\AlQemma_Setup.exe"
+"%ISCC_EXE%" "%SCRIPT_DIR%AlQemma.iss"
 if errorlevel 1 goto :error
+if not exist "%SCRIPT_DIR%installer\AlQemma_Setup.exe" (
+    echo.
+    echo ERROR: Inno Setup finished without creating installer\AlQemma_Setup.exe.
+    goto :error
+)
 
 echo.
 echo =====================================================

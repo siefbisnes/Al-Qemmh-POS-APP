@@ -5,7 +5,7 @@
 ; (or any GUID generator) and keep this exact value for all future builds.
 AppId={{A1E2C9F0-6B3D-4C7A-9A1E-2C9F06B3D4C7}
 AppName=AlQemma
-AppVersion=4.7.7
+AppVersion=4.7.8
 DefaultGroupName=AlQemma
 Compression=lzma2
 SolidCompression=yes

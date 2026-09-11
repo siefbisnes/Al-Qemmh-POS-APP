@@ -19,7 +19,7 @@ This is the repository index for developers who need to locate behavior quickly.
 
 Every file in `app/routes/` is a Flask blueprint or route group:
 
-`auth.py`, `branding.py`, `categories.py`, `compatibility.py`, `connectivity.py`, `customers.py`, `dashboard.py`, `diagnostics.py`, `expenses.py`, `media.py`, `notifications.py`, `orders.py`, `products.py`, `purchases.py`, `reports.py`, `sales.py`, `settings.py`, and `warranties.py`.
+`auth.py`, `branding.py`, `categories.py`, `compatibility.py`, `connectivity.py`, `customers.py`, `dashboard.py`, `expenses.py`, `media.py`, `notifications.py`, `orders.py`, `products.py`, `purchases.py`, `reports.py`, `sales.py`, `settings.py`, and `warranties.py`.
 
 Use this command to list every route decorator and handler definition:
 

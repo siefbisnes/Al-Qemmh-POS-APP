@@ -32,8 +32,10 @@ Run the build script:
 build_exe.bat
 ```
 
-This runs PyInstaller and then invokes Inno Setup to create
-`installer\AlQemma_Setup.exe`.
+This runs PyInstaller and then automatically invokes Inno Setup to create
+`installer\AlQemma_Setup.exe`. The build is considered failed if Inno Setup
+is missing or if the installer compilation fails; a portable EXE without its
+Setup package is not treated as a successful build.
 
 If you'd rather run the steps yourself instead of the .bat file:
 ```

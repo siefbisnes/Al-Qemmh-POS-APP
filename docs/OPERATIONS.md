@@ -56,7 +56,6 @@ Unsigned PyInstaller executables may trigger Windows SmartScreen or antivirus wa
 - Reinstall `requirements.txt`.
 - Run the source entry point directly to see the traceback.
 - Check that the runtime directory is writable.
-- Use the diagnostics page once the server is running.
 
 ### Pages load but data is missing
 

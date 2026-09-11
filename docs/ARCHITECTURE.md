@@ -41,7 +41,7 @@ Business rules and reusable database operations belong in `app/services/`. This 
 
 ### Routes
 
-The route blueprints cover authentication, dashboard, products, categories, sales, purchases, orders, customers, warranties, expenses, reports, branding, settings, diagnostics, connectivity, notifications, media, and compatibility search. Most endpoints are browser pages or form submissions rather than REST resources.
+The route blueprints cover authentication, dashboard, products, categories, sales, purchases, orders, customers, warranties, expenses, reports, branding, settings, connectivity, notifications, media, and compatibility search. Most endpoints are browser pages or form submissions rather than REST resources.
 
 ### Services
 

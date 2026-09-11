@@ -42,20 +42,32 @@ function setupPersistentNavigation() {
 }
 
 function executePageScripts(doc) {
-  doc.querySelectorAll("script[src]").forEach((source) => {
-    const src = new URL(source.src, window.location.href).href;
-    if (src.endsWith("/js/app.js")) return;
-    const script = document.createElement("script");
-    script.src = src;
-    document.body.appendChild(script);
-  });
+  const sources = [...doc.querySelectorAll("script[src]")]
+    .filter((source) => !source.src.endsWith("/js/app.js"));
+  const inlineScripts = [...doc.querySelectorAll("script[data-page-script]")];
 
-  doc.querySelectorAll("script[data-page-script]").forEach((source) => {
+  function runInlineScripts() {
+    inlineScripts.forEach((source) => {
+      const script = document.createElement("script");
+      script.textContent = source.textContent;
+      document.body.appendChild(script);
+      script.remove();
+    });
+  }
+
+  function loadNext(index) {
+    if (index >= sources.length) {
+      runInlineScripts();
+      return;
+    }
     const script = document.createElement("script");
-    script.textContent = source.textContent;
+    script.src = new URL(sources[index].src, window.location.href).href;
+    script.onload = () => loadNext(index + 1);
+    script.onerror = () => loadNext(index + 1);
     document.body.appendChild(script);
-    script.remove();
-  });
+  }
+
+  loadNext(0);
 }
 
 function setupMobileNav() {

@@ -980,20 +980,6 @@ table.data-table tr:last-child td {
     margin-bottom: 1rem;
 }
 
-.login-diagnostics-link {
-    display: block;
-    text-align: center;
-    margin-top: 1.4rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    text-decoration: none;
-}
-.login-diagnostics-link:hover {
-    color: var(--accent);
-}
-
 .form-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

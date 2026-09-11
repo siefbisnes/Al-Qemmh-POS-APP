@@ -178,8 +178,25 @@
     var c = payload.charts || {};
     try {
       upsertLine("profit", "chartProfitRevenue", c.profit_revenue);
-      upsertBar("purchases", "chartPurchases", c.purchases_expected, false);
-      upsertBar("productsValue", "chartProductsValue", c.products_value, false);
+      var purchasesData = c.purchases_expected;
+      var productsValue = c.products_value;
+      if (purchasesData && productsValue && productsValue.datasets && productsValue.datasets[0]) {
+        purchasesData = {
+          labels: purchasesData.labels.slice(),
+          datasets: purchasesData.datasets.slice(),
+        };
+        var productValue = Number(productsValue.datasets[0].data[0]) || 0;
+        var productSeries = [];
+        for (var i = 0; i < purchasesData.labels.length; i++) productSeries.push(null);
+        if (productSeries.length) productSeries[productSeries.length - 1] = productValue;
+        purchasesData.datasets.push({
+          label: "قيمة المنتجات / Products Value",
+          data: productSeries,
+          backgroundColor: "rgba(167, 139, 250, 0.85)",
+          borderRadius: 6,
+        });
+      }
+      upsertBar("purchases", "chartPurchases", purchasesData, false);
       upsertBar("stockAtRisk", "chartStockAtRisk", c.stock_at_risk, true);
     } catch (err) {
       setStatus(

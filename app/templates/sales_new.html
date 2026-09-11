@@ -667,7 +667,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script data-page-script>
+(function () {
   const linesContainer = document.getElementById("saleLines");
   const lineTemplate = document.getElementById("saleLineTemplate");
   const paymentsContainer = document.getElementById("paymentRows");
@@ -1152,5 +1153,6 @@
   if (paymentsContainer.querySelectorAll(".payment-row").length === 0) {
     addPaymentRow();
   }
+})();
 </script>
 {% endblock %}

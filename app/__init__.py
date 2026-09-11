@@ -50,7 +50,6 @@ def register_blueprints(app):
     from app.routes.auth import bp as auth_bp
     from app.routes.notifications import bp as notifications_bp
     from app.routes.orders import bp as orders_bp
-    from app.routes.diagnostics import bp as diagnostics_bp
     from app.routes.quran import bp as quran_bp
 
     app.register_blueprint(auth_bp)
@@ -69,7 +68,6 @@ def register_blueprints(app):
     app.register_blueprint(purchases_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(orders_bp)
-    app.register_blueprint(diagnostics_bp)
     app.register_blueprint(quran_bp)
 
 
@@ -227,14 +225,6 @@ def register_auth_guard(app):
             return
         if request.endpoint.startswith("notifications."):
             return
-        # Hardware diagnostics is meant to be usable from the lock/login
-        # screen itself (spec: "must be triggered directly from the
-        # desktop POS Log Screen / Lock Screen") - a cashier needs to be
-        # able to test a dead mouse or keyboard BEFORE they can type a
-        # password with it, so this can't require being logged in.
-        if request.endpoint.startswith("diagnostics."):
-            return
-
         # The standalone Quran player is a separate desktop window. Its
         # one-time desktop token is its authentication boundary, so it must
         # be able to open alongside the login screen without exposing Quran
