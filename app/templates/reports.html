@@ -144,6 +144,16 @@
 
       <article class="ra-chart-card">
         <div class="ra-chart-head">
+          <h3>قيمة المنتجات</h3>
+          <span>Σ purchase price across products</span>
+        </div>
+        <div class="ra-chart-wrap stack">
+          <canvas id="chartProductsValue" aria-label="Total products purchase value chart"></canvas>
+        </div>
+      </article>
+
+      <article class="ra-chart-card">
+        <div class="ra-chart-head">
           <h3>المخزون الراكد والهالك</h3>
           <span>راكد + هالك في نظرة واحدة</span>
         </div>
@@ -163,10 +173,10 @@
 
 <div class="page-header" style="margin-top:2rem;"><h2>السجل</h2></div>
 <table class="data-table">
-  <tr><th>التاريخ والوقت</th><th>النوع</th><th>التفاصيل</th><th>الصادر</th><th>الوارد</th><th>إجراءات</th></tr>
+  <tr><th>التاريخ</th><th>النوع</th><th>التفاصيل</th><th>الصادر</th><th>الوارد</th><th>إجراءات</th></tr>
   {% for e in ledger_entries if e.type != 'purchase' or show_purchase_price %}
   <tr>
-    <td>{{ e.date|localdt }}</td>
+    <td>{{ (e.date|localdt).split(' ')[0] }}</td>
     <td>
       {% if e.type == 'sale' %}<span class="badge badge-grade-a">بيع</span>
       {% elif e.type == 'purchase' %}<span class="badge badge-grade-c">مشتريات</span>

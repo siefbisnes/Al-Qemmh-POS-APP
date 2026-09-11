@@ -16,6 +16,7 @@
   var charts = {
     profit: null,
     purchases: null,
+    productsValue: null,
     stockAtRisk: null,
   };
 
@@ -178,6 +179,7 @@
     try {
       upsertLine("profit", "chartProfitRevenue", c.profit_revenue);
       upsertBar("purchases", "chartPurchases", c.purchases_expected, false);
+      upsertBar("productsValue", "chartProductsValue", c.products_value, false);
       upsertBar("stockAtRisk", "chartStockAtRisk", c.stock_at_risk, true);
     } catch (err) {
       setStatus(

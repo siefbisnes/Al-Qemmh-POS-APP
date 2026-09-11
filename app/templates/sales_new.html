@@ -457,6 +457,36 @@
     .customer-fields-grid {
       grid-template-columns: 1fr;
     }
+    .pos-cart-head {
+      display: none;
+    }
+    .pos-cart-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem 0.6rem;
+    }
+    .pos-item-name {
+      flex: 1 1 100%;
+      order: 1;
+    }
+    .pos-qty {
+      order: 2;
+    }
+    .pos-cart-row input.line-price {
+      order: 3;
+      width: auto;
+      flex: 1 1 90px;
+    }
+    .pos-line-total {
+      order: 4;
+      align-self: center;
+      font-size: 0.9rem;
+    }
+    .pos-row-delete {
+      order: 5;
+      margin-inline-start: auto;
+    }
   }
   
 </style>

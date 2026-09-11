@@ -273,6 +273,33 @@ def purchases_vs_expected(date_from, date_to, bucket):
     }
 
 
+def products_value_chart():
+    """قيمة المنتجات: Σ purchase_price across every currently-sellable
+    product row (NOT multiplied by quantity - a straight sum of the
+    recorded purchase_price field, as requested). Same
+    is_active/service_placeholder filtering as inventory_value in
+    kpis() for consistency. COALESCE handles legacy rows where
+    purchase_price may be NULL, so old data doesn't break the total."""
+    with db_cursor() as cur:
+        row = cur.execute(
+            """SELECT COALESCE(SUM(purchase_price), 0) AS total
+               FROM products
+               WHERE is_active = 1 AND COALESCE(source, '') <> 'service_placeholder'"""
+        ).fetchone()
+    total = round(float(row["total"] or 0), 2)
+    return {
+        "labels": ["قيمة المنتجات"],
+        "datasets": [
+            {
+                "label": "قيمة المنتجات / Products Value",
+                "data": [total],
+                "backgroundColor": "rgba(167, 139, 250, 0.85)",
+                "borderRadius": 8,
+            },
+        ],
+    }
+
+
 def stagnant_and_damaged(date_from=None, date_to=None):
     """راكد (stagnant shelf liquidity, >60 days) + هالك (explicit
     stock_writeoffs ledger) — merged into ONE combined "at-risk
@@ -502,6 +529,7 @@ def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME, reset_at: str | 
         "charts": {
             "profit_revenue": profit_revenue_series(date_from, date_to, bucket),
             "purchases_expected": purchases_vs_expected(date_from, date_to, bucket),
+            "products_value": products_value_chart(),
             "stock_at_risk": stock["combined_chart"],
         },
         "stock_details": {

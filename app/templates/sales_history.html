@@ -14,7 +14,7 @@
     <th>رقم الإيصال</th>
     <th>العميل</th>
     <th>نوع البيعه</th>
-    <th>التاريخ والوقت</th>
+    <th>التاريخ</th>
     <th>الإجمالي</th>
     <th>المدفوع</th>
     <th>المتبقي</th>
@@ -38,7 +38,7 @@
           <span class="badge badge-sale">بيع عادي</span>
         {% endif %}
       </td>
-      <td data-label="التاريخ والوقت">{{ t.created_at|localdt }}</td>
+      <td data-label="التاريخ">{{ (t.created_at|localdt).split(' ')[0] }}</td>
       <td data-label="الإجمالي">{{ t.total_amount|money }}</td>
       <td data-label="المدفوع">{{ t.paid_amount|money }}</td>
       <td data-label="المتبقي">
