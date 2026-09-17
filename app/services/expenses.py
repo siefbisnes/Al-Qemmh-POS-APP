@@ -48,7 +48,13 @@ def expenses_by_method(date_from=None, date_to=None):
     by_method = {row["payment_method"]: row["total"] for row in rows}
     cash = by_method.get("cash", 0) or 0
     online = (by_method.get("vodafone_cash", 0) or 0) + (by_method.get("instapay", 0) or 0)
-    return {"cash": cash, "online": online, "by_method": by_method}
+    return {
+        "cash": cash,
+        "online": online,
+        "vodafone_cash": by_method.get("vodafone_cash", 0) or 0,
+        "instapay": by_method.get("instapay", 0) or 0,
+        "by_method": by_method,
+    }
 
 
 def add_expense(description, amount, expense_date=None, payment_method="cash"):

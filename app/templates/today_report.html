@@ -4,14 +4,15 @@
 
 <div class="page-header">
   <h1>تقرير اليوم</h1>
-  <a href="{{ url_for('reports.today_export_pdf') }}" class="btn btn-primary">تحميل PDF</a>
+  <a href="{{ url_for('reports.today_report_export_pdf') }}" class="btn btn-primary">تحميل PDF</a>
 </div>
 
 <div dir="rtl" style="text-align:right;">
   <p class="subtitle">{{ report.date }}</p>
 
   <div class="stat-grid">
-    <div class="stat-card"><div class="label">أونلاين</div><div class="value">{{ report.payments.online|money }}</div></div>
+    <div class="stat-card"><div class="label">InstaPay</div><div class="value">{{ report.instapay|money }}</div></div>
+    <div class="stat-card"><div class="label">Vodafone Cash</div><div class="value">{{ report.vodafone_cash|money }}</div></div>
     <div class="stat-card"><div class="label">نقدي</div><div class="value">{{ report.payments.cash|money }}</div></div>
     <div class="stat-card"><div class="label">المصروفات</div><div class="value">{{ report.expenses_total|money }}</div></div>
     <div class="stat-card"><div class="label">الدرج (نقدي - مصروفات)</div><div class="value">{{ report.drawer|money }}</div></div>

@@ -321,6 +321,9 @@
   <button class="mobile-nav-toggle" id="mobileNavToggle" aria-label="فتح/إغلاق القائمة">
     <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
   </button>
+  <button class="mobile-back-button" id="mobileBackButton" type="button" aria-label="رجوع" title="رجوع">
+    <span aria-hidden="true">←</span>
+  </button>
 
   <main class="main">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -442,6 +445,14 @@
   });
 </script>
 <script>
+  (function () {
+    var backButton = document.getElementById('mobileBackButton');
+    if (!backButton) return;
+    backButton.addEventListener('click', function () {
+      if (window.history.length > 1) window.history.back();
+    });
+  })();
+
   // Backspace = go to the previous page, as a navigation convenience on
   // top of (not instead of) the app's existing links/buttons. Works the
   // same in a plain browser tab and inside the pywebview desktop shell,

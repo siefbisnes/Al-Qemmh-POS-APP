@@ -34,6 +34,9 @@ EVENT_LABELS_AR = {
     "price_selling": "تغيير سعر البيع",
     "price_purchase": "تغيير سعر الشراء",
     "name_changed": "تغيير اسم المنتج",
+    "identifier_changed": "تغيير المعرف",
+    "grade_changed": "تغيير الدرجة",
+    "category_changed": "تغيير القسم",
     "specs_changed": "تعديل مواصفات المنتج",
     "sale_return": "ارجاع",
     "order_deleted": "حذف اوردر",
@@ -46,6 +49,28 @@ EVENT_LABELS_AR = {
 # labelling them "(محذوف)" the way it does for a genuinely deleted
 # product, since that would be misleading here.
 NON_PRODUCT_EVENT_TYPES = {"order_deleted", "expense_deleted", "purchase_deleted"}
+
+USER_VISIBLE_EVENT_TYPES = {
+    "created", "removed", "quantity_sale", "quantity_manual", "quantity_damaged",
+    "price_selling", "name_changed", "identifier_changed", "grade_changed", "category_changed",
+    "specs_changed", "sale_return",
+}
+
+
+def today_events():
+    """Return user-visible audit events from the current calendar day only."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    placeholders = ",".join("?" for _ in USER_VISIBLE_EVENT_TYPES)
+    query = f"""SELECT * FROM product_audit_log
+                WHERE created_at >= ? AND created_at <= ?
+                  AND event_type IN ({placeholders})
+                ORDER BY created_at DESC, id DESC"""
+    with db_cursor() as cur:
+        events = [dict(row) for row in cur.execute(
+            query, [f"{today} 00:00:00", f"{today} 23:59:59", *sorted(USER_VISIBLE_EVENT_TYPES)]
+        ).fetchall()]
+    _attach_invoice_numbers(events)
+    return events
 
 
 def _current_username():

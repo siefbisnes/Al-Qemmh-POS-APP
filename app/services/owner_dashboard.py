@@ -537,7 +537,7 @@ def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME, reset_at: str | 
     # natural window - إعادة ضبط التقارير still correctly zeroes the
     # separate cash-drawer totals on the main Reports page (reports.py),
     # which this doesn't touch.
-    date_from, date_to, meta = _range_for(timeframe, reset_at=None)
+    date_from, date_to, meta = _range_for(timeframe, reset_at=reset_at)
     bucket = meta["bucket"]
 
     stock = stagnant_and_damaged(date_from=date_from, date_to=date_to)

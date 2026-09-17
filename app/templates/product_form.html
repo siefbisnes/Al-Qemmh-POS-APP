@@ -22,6 +22,10 @@
       <input type="text" name="name" required value="{{ product.name if product else (form.name if form else '') }}" placeholder="مثال: EliteDisplay E243">
     </div>
     <div class="field">
+      <label>المعرف</label>
+      <input type="text" name="identifier" value="{{ product.identifier if product else (form.identifier if form else '') }}" placeholder="رقم أو كود المنتج (اختياري)">
+    </div>
+    <div class="field">
       <label>الدرجة</label>
       <select name="grade">
         {% for g in ['A', 'B', 'C'] %}

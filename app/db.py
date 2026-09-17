@@ -430,6 +430,12 @@ MIGRATIONS = [
     ("sales.custom_product_name column", """
         ALTER TABLE sales ADD COLUMN custom_product_name TEXT
     """),
+    ("products.identifier column", """
+        ALTER TABLE products ADD COLUMN identifier TEXT
+    """),
+    ("idx_products_identifier", """
+        CREATE INDEX IF NOT EXISTS idx_products_identifier ON products(identifier)
+    """),
     ("idx_sales_transaction", """
         CREATE INDEX IF NOT EXISTS idx_sales_transaction ON sales(transaction_id)
     """),

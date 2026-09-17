@@ -83,11 +83,16 @@ def index():
 
     date_from = request.args.get("from") or None
     date_to = request.args.get("to") or None
+    record_type = request.args.get("type") or ""
     purchases = purchase_service.list_purchases(date_from, date_to)
     expenses = expense_service.list_expenses(date_from, date_to)
+    if record_type == "purchase":
+        expenses = []
+    elif record_type == "expense":
+        purchases = []
     records = _combine_cost_records(purchases, expenses)
-    purchase_online = purchase_service.purchases_by_method(date_from, date_to)["online"]
-    expense_online = expense_service.expenses_by_method(date_from, date_to)["online"]
+    purchase_methods = purchase_service.purchases_by_method(date_from, date_to)
+    expense_methods = expense_service.expenses_by_method(date_from, date_to)
 
     return render_template(
         "expenses.html",
@@ -95,9 +100,12 @@ def index():
         payment_methods=PAYMENT_METHODS,
         total_purchases=purchase_service.total_purchases(date_from, date_to),
         total_expenses=expense_service.total_expenses(date_from, date_to),
-        online_outflow=purchase_online + expense_online,
+        online_outflow=purchase_methods["online"] + expense_methods["online"],
+        online_instapay=purchase_methods["instapay"] + expense_methods["instapay"],
+        online_vodafone_cash=purchase_methods["vodafone_cash"] + expense_methods["vodafone_cash"],
         date_from=date_from,
         date_to=date_to,
+        record_type=record_type,
     )
 
 

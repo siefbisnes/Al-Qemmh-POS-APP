@@ -29,7 +29,8 @@
     <p class="sub">تقرير اليوم — {{ report.date }}</p>
 
     <div class="stat-grid">
-      <div class="stat"><div class="label">أونلاين</div><div class="value">{{ report.payments.online|money }} ج.م</div></div>
+      <div class="stat"><div class="label">InstaPay</div><div class="value">{{ report.instapay|money }} ج.م</div></div>
+      <div class="stat"><div class="label">Vodafone Cash</div><div class="value">{{ report.vodafone_cash|money }} ج.م</div></div>
       <div class="stat"><div class="label">نقدي</div><div class="value">{{ report.payments.cash|money }} ج.م</div></div>
       <div class="stat"><div class="label">المصروفات</div><div class="value">{{ report.expenses_total|money }} ج.م</div></div>
       <div class="stat"><div class="label">الدرج (نقدي - مصروفات)</div><div class="value">{{ (report.payments.cash - report.expenses_total)|money }} ج.م</div></div>

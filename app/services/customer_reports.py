@@ -66,9 +66,13 @@ def payment_totals(date_from=None, date_to=None):
         + (by_method.get("instapay", 0) or 0)
         + (by_method.get("instabarid", 0) or 0)
     )
+    vodafone_cash = by_method.get("vodafone_cash", 0) or 0
+    instapay = by_method.get("instapay", 0) or 0
     return {
         "cash": cash,
         "online": online,
+        "vodafone_cash": vodafone_cash,
+        "instapay": instapay,
         "by_method": by_method,
         "total_received": cash + online,
     }

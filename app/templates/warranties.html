@@ -71,7 +71,7 @@ content %}
             </tr>
             {% for w in active %}
             <tr>
-                <td>{{ w.receipt_number or '—' }}</td>
+                <td>{% if w.transaction_id and w.receipt_number %}<a href="{{ url_for('sales.transaction_detail', transaction_id=w.transaction_id) }}">{{ w.receipt_number }}</a>{% else %}—{% endif %}</td>
                 <td>
                     <a
                         href="{{ url_for('products.detail', product_id=w.product_id) }}"
@@ -119,7 +119,7 @@ content %}
             </tr>
             {% for w in expired %}
             <tr>
-                <td>{{ w.receipt_number or '—' }}</td>
+                <td>{% if w.transaction_id and w.receipt_number %}<a href="{{ url_for('sales.transaction_detail', transaction_id=w.transaction_id) }}">{{ w.receipt_number }}</a>{% else %}—{% endif %}</td>
                 <td>
                     <a
                         href="{{ url_for('products.detail', product_id=w.product_id) }}"

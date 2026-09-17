@@ -45,6 +45,53 @@
     color-scheme: light;
 }
 
+.audit-log-toolbar select {
+    flex: 0 1 220px;
+    min-width: 160px;
+    max-width: 260px;
+}
+
+.toolbar .field select {
+    flex: 0 0 auto;
+    height: 42px;
+    min-height: 42px;
+    max-height: 42px;
+}
+
+.mobile-back-button {
+    display: inline-flex;
+    position: fixed;
+    top: 0.75rem;
+    left: 0.8rem;
+    right: auto;
+    z-index: 100;
+    width: 2.7rem;
+    height: 2.7rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1;
+    direction: ltr;
+    cursor: pointer;
+    box-shadow: var(--shadow-pop);
+}
+
+@media (max-width: 880px) {
+    .mobile-back-button {
+        top: 0.8rem;
+        box-shadow: var(--shadow-soft);
+    }
+    .audit-log-toolbar select {
+        flex: 1 1 100%;
+        max-width: none;
+    }
+}
+
 /* ===================================================================
    Dark theme - overrides
    =================================================================== */

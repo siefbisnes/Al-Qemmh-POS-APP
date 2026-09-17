@@ -5,6 +5,25 @@ from app.services import products as product_service
 from app.services import categories as category_service
 from app.services import compatibility as compatibility_service
 
+
+def _notify_product_events(product_id, product_name, event_types):
+    visible = [event_type for event_type in event_types if event_type in {
+        "created", "removed", "quantity_manual", "price_selling", "name_changed",
+        "identifier_changed", "grade_changed", "category_changed", "specs_changed",
+        "quantity_sale", "quantity_damaged", "sale_return",
+    }]
+    if not visible:
+        return
+    from app.services import product_audit
+    labels = [product_audit.EVENT_LABELS_AR.get(event_type, "تغيير المنتج") for event_type in dict.fromkeys(visible)]
+    label_text = "، ".join(labels)
+    notify_event(
+        "product_changed",
+        "تغيير في المنتجات",
+        f"{product_name or 'منتج'}: {label_text}.",
+        url=url_for("products.detail", product_id=product_id) if product_id else url_for("dashboard.index"),
+    )
+
 bp = Blueprint("products", __name__, url_prefix="/products")
 
 
@@ -67,13 +86,12 @@ def new():
             purchase_price=purchase_price,
             selling_price=request.form.get("selling_price", type=float) or 0,
             spec_values=spec_values,
+            identifier=request.form.get("identifier", "").strip() or None,
         )
 
         _handle_image_uploads(product_id)
 
-        title = "Product Added"
-        message = f"تم إضافة {request.form.get('name', '').strip() or 'منتج'} بنجاح."
-        notify_event("product_added", title, message, url=url_for("products.detail", product_id=product_id))
+        _notify_product_events(product_id, request.form.get("name", "").strip(), ["created"])
 
         flash("Product added.", "success")
         return redirect(url_for("products.detail", product_id=product_id))
@@ -114,7 +132,7 @@ def edit(product_id):
         # field previously fell back to 0 and silently overwrote a real
         # saved price - now it's left untouched instead.
         updated_price = submitted_selling_price if submitted_selling_price is not None else float(product.get("selling_price") or 0)
-        product_service.update_product(
+        changed_events = product_service.update_product(
             product_id=product_id,
             category_id=category_id,
             name=updated_name,
@@ -124,23 +142,11 @@ def edit(product_id):
             purchase_price=purchase_price,
             selling_price=updated_price,
             spec_values=spec_values,
+            identifier=request.form.get("identifier", "").strip() or None,
         )
         _handle_image_uploads(product_id)
 
-        # Notify ONLY on the two changes that should ever alert someone:
-        # selling price and quantity. A name-only edit or a purchase-price
-        # change (سعر الشراء - cost basis, not customer-facing) must NOT
-        # notify - purchase price is deliberately excluded here, same as
-        # it always has been; the name check that used to also trigger
-        # this has been removed since it's not one of the two allowed
-        # triggers.
-        if (
-            updated_quantity != int(product.get("quantity") or 0)
-            or updated_price != float(product.get("selling_price") or 0)
-        ):
-            title = "Product Updated"
-            message = f"تم تحديث {updated_name or product['name']} — الكمية: {updated_quantity} — السعر: {updated_price:.2f} ج.م."
-            notify_event("product_updated", title, message, url=url_for("products.detail", product_id=product_id))
+        _notify_product_events(product_id, updated_name or product["name"], changed_events)
         flash("Product updated.", "success")
         return redirect(url_for("products.detail", product_id=product_id))
 
@@ -189,6 +195,7 @@ def delete(product_id):
         flash("حصل خطأ أثناء حذف المنتج.", "error")
         return redirect(url_for("products.detail", product_id=product_id))
 
+    _notify_product_events(product_id, product["name"], ["removed"])
     if wants_json:
         return jsonify({"success": True, "product_id": product_id})
 

@@ -12,6 +12,8 @@ TARGETS = [
     ("drawer", "الدرج"),
     ("today", "اليوم"),
     ("online", "أونلاين"),
+    ("instapay", "InstaPay"),
+    ("vodafone_cash", "Vodafone Cash"),
     ("total", "الاجمالي"),
     ("expenses", "المصروفات"),
     ("purchases", "المشتريات"),

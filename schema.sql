@@ -39,6 +39,7 @@ CREATE TABLE products (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     category_id     INTEGER NOT NULL REFERENCES categories(id),
     name            TEXT NOT NULL,
+    identifier      TEXT,
     grade           TEXT NOT NULL DEFAULT 'A',   -- A / B / C / Scrap, etc. (free text, kept simple)
     quantity        INTEGER NOT NULL DEFAULT 0,
     description     TEXT,
@@ -50,6 +51,7 @@ CREATE TABLE products (
 );
 
 CREATE INDEX idx_products_name ON products(name);
+CREATE INDEX idx_products_identifier ON products(identifier);
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_active ON products(is_active);
 

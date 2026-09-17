@@ -72,8 +72,8 @@ def list_products(search=None, category_id=None, grade=None, low_stock_only=Fals
     if not include_sold:
         query += " AND p.quantity > 0"
     if search:
-        query += " AND p.name LIKE ?"
-        params.append(f"%{search}%")
+        query += " AND (p.name LIKE ? OR COALESCE(p.identifier, '') LIKE ?)"
+        params.extend([f"%{search}%", f"%{search}%"])
     if category_id:
         query += " AND p.category_id = ?"
         params.append(category_id)
@@ -109,8 +109,8 @@ def list_sold_products(search=None, category_id=None):
     """
     params = []
     if search:
-        query += " AND p.name LIKE ?"
-        params.append(f"%{search}%")
+        query += " AND (p.name LIKE ? OR COALESCE(p.identifier, '') LIKE ?)"
+        params.extend([f"%{search}%", f"%{search}%"])
     if category_id:
         query += " AND p.category_id = ?"
         params.append(category_id)
@@ -125,7 +125,15 @@ def restore_product(product_id, quantity=1):
     """Bring a sold-out product back into active inventory with new stock."""
     quantity = max(1, int(quantity))
     with db_cursor(commit=True) as cur:
+        row = cur.execute("SELECT name, quantity FROM products WHERE id = ?", (product_id,)).fetchone()
         cur.execute("UPDATE products SET quantity = quantity + ? WHERE id = ?", (quantity, product_id))
+        if row:
+            product_audit.log_event(
+                product_id, row["name"], "quantity_manual",
+                quantity_before=row["quantity"], quantity_after=row["quantity"] + quantity,
+                new_value=str(quantity), note="إعادة تفعيل المنتج", cur=cur,
+            )
+            product_audit.record_expected_returns_snapshot(cur=cur)
 
 
 def get_product(product_id):
@@ -203,15 +211,15 @@ def get_service_placeholder_product():
 # ---------- create / update ----------
 
 def create_product(category_id, name, grade, quantity, description,
-                    purchase_price, selling_price, spec_values, source="manual"):
+                    purchase_price, selling_price, spec_values, source="manual", identifier=None):
     """spec_values: dict of {category_field_id: value}"""
     _validate_product_values(quantity, purchase_price, selling_price)
     with db_cursor(commit=True) as cur:
         cur.execute(
             """INSERT INTO products
-               (category_id, name, grade, quantity, description, purchase_price, selling_price, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (category_id, name, grade, quantity, description, purchase_price, selling_price, source),
+                    (category_id, name, identifier, grade, quantity, description, purchase_price, selling_price, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (category_id, name, identifier, grade, quantity, description, purchase_price, selling_price, source),
         )
         product_id = cur.lastrowid
         _save_specifications(cur, product_id, spec_values)
@@ -227,11 +235,11 @@ def create_product(category_id, name, grade, quantity, description,
 
 
 def update_product(product_id, category_id, name, grade, quantity, description,
-                    purchase_price, selling_price, spec_values):
+                    purchase_price, selling_price, spec_values, identifier=None):
     _validate_product_values(quantity, purchase_price, selling_price)
     with db_cursor(commit=True) as cur:
         before = cur.execute(
-            "SELECT name, quantity, description, purchase_price, selling_price FROM products WHERE id = ?",
+            "SELECT category_id, name, identifier, grade, quantity, description, purchase_price, selling_price FROM products WHERE id = ?",
             (product_id,),
         ).fetchone()
         before_specs = {
@@ -243,30 +251,49 @@ def update_product(product_id, category_id, name, grade, quantity, description,
         }
 
         cur.execute(
-            """UPDATE products SET category_id = ?, name = ?, grade = ?, quantity = ?, description = ?,
+            """UPDATE products SET category_id = ?, name = ?, identifier = ?, grade = ?, quantity = ?, description = ?,
                purchase_price = ?, selling_price = ? WHERE id = ?""",
-            (category_id, name, grade, quantity, description, purchase_price, selling_price, product_id),
+            (category_id, name, identifier, grade, quantity, description, purchase_price, selling_price, product_id),
         )
         cur.execute("DELETE FROM specifications WHERE product_id = ?", (product_id,))
         _save_specifications(cur, product_id, spec_values)
 
         if before:
-            _log_update_diff(cur, product_id, before, before_specs, name, quantity, description,
-                              purchase_price, selling_price, spec_values or {})
+            changed_events = _log_update_diff(cur, product_id, before, before_specs, category_id, name,
+                                              identifier, grade, quantity, description, purchase_price,
+                                              selling_price, spec_values or {})
             product_audit.record_expected_returns_snapshot(cur=cur)
+            return changed_events
+        return []
 
 
-def _log_update_diff(cur, product_id, before, before_specs, new_name, new_quantity, new_description,
-                      new_purchase_price, new_selling_price, new_spec_values):
+def _log_update_diff(cur, product_id, before, before_specs, new_category_id, new_name, new_identifier,
+                      new_grade, new_quantity, new_description, new_purchase_price,
+                      new_selling_price, new_spec_values):
     """Compares the row/specs read before the UPDATE above against the
     new values just written, and logs exactly which of these
     user-facing fields actually changed - never a generic "product
     updated" entry. Called from within update_product()'s existing
     transaction (shares its `cur`), so this never opens a second
     transaction on the same request-scoped connection."""
+    changed_events = []
+    if before["category_id"] != new_category_id:
+        product_audit.log_event(product_id, new_name, "category_changed", old_value=before["category_id"], new_value=new_category_id, cur=cur)
+        changed_events.append("category_changed")
+
     if str(before["name"] or "") != str(new_name or ""):
         product_audit.log_event(product_id, new_name, "name_changed",
                                  old_value=before["name"], new_value=new_name, cur=cur)
+        changed_events.append("name_changed")
+
+    if str(before["identifier"] or "") != str(new_identifier or ""):
+        product_audit.log_event(product_id, new_name, "identifier_changed",
+                                old_value=before["identifier"], new_value=new_identifier, cur=cur)
+        changed_events.append("identifier_changed")
+
+    if str(before["grade"] or "") != str(new_grade or ""):
+        product_audit.log_event(product_id, new_name, "grade_changed", old_value=before["grade"], new_value=new_grade, cur=cur)
+        changed_events.append("grade_changed")
 
     old_qty = before["quantity"]
     if old_qty != new_quantity:
@@ -275,11 +302,13 @@ def _log_update_diff(cur, product_id, before, before_specs, new_name, new_quanti
             quantity_before=old_qty, quantity_after=new_quantity,
             new_value=str(new_quantity - (old_qty or 0)), cur=cur,
         )
+        changed_events.append("quantity_manual")
 
     old_selling = float(before["selling_price"] or 0)
     if abs(old_selling - float(new_selling_price or 0)) > 0.009:
         product_audit.log_event(product_id, new_name, "price_selling",
                                  old_value=old_selling, new_value=new_selling_price, cur=cur)
+        changed_events.append("price_selling")
 
     old_purchase = float(before["purchase_price"] or 0)
     if abs(old_purchase - float(new_purchase_price or 0)) > 0.009:
@@ -298,6 +327,9 @@ def _log_update_diff(cur, product_id, before, before_specs, new_name, new_quanti
             note="تم تعديل المواصفات" if specs_changed else None,
             cur=cur,
         )
+        changed_events.append("specs_changed")
+
+    return changed_events
 
 
 def _save_specifications(cur, product_id, spec_values):
@@ -325,6 +357,8 @@ def soft_delete_product(product_id):
                 cur=cur,
             )
             product_audit.record_expected_returns_snapshot(cur=cur)
+            return "removed"
+    return None
 
 
 def _validate_product_values(quantity, purchase_price, selling_price):

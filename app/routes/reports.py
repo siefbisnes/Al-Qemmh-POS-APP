@@ -93,8 +93,11 @@ def index():
         today_total=today_only_report["today_total"],
         range_summary=range_summary,
         ledger_entries=ledger_entries,
-        adjustment_targets=(adjustment_service.TARGETS if session.get("role") == "admin"
-                else [("drawer", "الدرج"), ("online", "أونلاين")]),
+        adjustment_targets=(
+            [target for target in adjustment_service.TARGETS if target[0] not in {"online", "today"}]
+            if session.get("role") == "admin"
+            else [("drawer", "الدرج"), ("instapay", "InstaPay"), ("vodafone_cash", "Vodafone Cash")]
+        ),
         date_from=date_from,
         date_to=date_to,
         reset_at=reset_at,
@@ -107,7 +110,7 @@ def index():
 @bp.route("/adjust", methods=["POST"])
 def adjust():
     target = request.form.get("target")
-    if session.get("role") != "admin" and target not in {"drawer", "online"}:
+    if session.get("role") != "admin" and target not in {"drawer", "instapay", "vodafone_cash"}:
         abort(403)
     kind = request.form.get("kind", "add")
     amount = request.form.get("amount", type=float)

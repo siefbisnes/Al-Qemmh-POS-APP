@@ -70,7 +70,8 @@
     <button type="button" class="btn btn-sm" id="toggleReportsDetails" style="margin-top:1rem;">التفاصيل</button>
   </div>
   <div class="stat-card"><div class="label">اليوم</div><div class="value">{{ today_total|money }}</div></div>
-  <div class="stat-card"><div class="label">أونلاين</div><div class="value">{{ range_summary.online|money }}</div></div>
+  <div class="stat-card"><div class="label">InstaPay</div><div class="value">{{ range_summary.instapay|money }}</div></div>
+  <div class="stat-card"><div class="label">Vodafone Cash</div><div class="value">{{ range_summary.vodafone_cash|money }}</div></div>
 </div>
 
 <div id="reportsDetailsCard" class="panel" style="display:none; margin-top:1rem;" dir="rtl">

@@ -45,6 +45,11 @@
 </form>
 
 <form class="toolbar" method="get">
+  <div class="field" style="margin:0;"><label>النوع</label><select name="type">
+    <option value="" {{ 'selected' if not record_type }}>الكل</option>
+    <option value="purchase" {{ 'selected' if record_type == 'purchase' }}>المشتريات</option>
+    <option value="expense" {{ 'selected' if record_type == 'expense' }}>المصروفات</option>
+  </select></div>
   <div class="field" style="margin:0;"><label>من</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
   <div class="field" style="margin:0;"><label>إلى</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
   <button type="submit" class="btn" style="align-self:flex-end;">تصفية</button>
@@ -55,7 +60,8 @@
   <div class="stat-card"><div class="label">إجمالي المشتريات</div><div class="value">{{ total_purchases|money }}</div></div>
   {% endif %}
   <div class="stat-card"><div class="label">إجمالي المصروفات</div><div class="value">{{ total_expenses|money }}</div></div>
-  <div class="stat-card"><div class="label">أونلاين</div><div class="value">{{ online_outflow|money }}</div></div>
+  <div class="stat-card"><div class="label">InstaPay</div><div class="value">{{ online_instapay|money }}</div></div>
+  <div class="stat-card"><div class="label">Vodafone Cash</div><div class="value">{{ online_vodafone_cash|money }}</div></div>
 </div>
 
 {% set visible_records = records if show_purchase_price else records|rejectattr('type', 'equalto', 'purchase')|list %}

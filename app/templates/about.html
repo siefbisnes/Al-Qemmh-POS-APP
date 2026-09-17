@@ -77,6 +77,20 @@
       {% endif %}
     </div>
   </section>
+
+  <section class="panel" style="margin-top:1.5rem; text-align:right;" dir="rtl">
+    <h2>تغييرات اليوم</h2>
+    {% if today_changes %}
+      {% for change in today_changes %}
+        <div style="display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; padding:.7rem 0; border-bottom:1px solid var(--border);">
+          <span><strong>{{ change.product_name }}</strong> · {{ product_event_labels.get(change.event_type, change.event_type) if product_event_labels is defined else change.event_type }}</span>
+          <span class="subtitle">{{ change.created_at[:16] }}</span>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="subtitle">لا توجد تغييرات للمنتجات اليوم.</p>
+    {% endif %}
+  </section>
 </div>
 
 {% endblock %}

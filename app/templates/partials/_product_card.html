@@ -8,6 +8,7 @@
   </a>
   <div class="body">
     <div class="name"><a href="{{ url_for('products.detail', product_id=p.id) }}">{{ p.name }}</a></div>
+    {% if p.identifier %}<div class="subtitle">المعرف: {{ p.identifier }}</div>{% endif %}
     <div class="meta-row">
       <span class="badge badge-grade-{{ p.grade|lower }}">الدرجة {{ p.grade }}</span>
       <span class="qty {{ 'low' if p.quantity <= 3 }}">{{ p.quantity }} في المخزون</span>

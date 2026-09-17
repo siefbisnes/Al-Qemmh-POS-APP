@@ -84,9 +84,9 @@ def today_report(date_from=None, all_time_if_none=False):
         sale_query = """SELECT s.*, COALESCE(NULLIF(TRIM(s.custom_product_name), ''), s.service_description, p.name) AS product_name,
                       p.purchase_price, p.quantity AS remaining_quantity
                FROM sales s JOIN products p ON p.id = s.product_id
-               WHERE s.is_voided = 0 AND s.sale_date LIKE ?
+               WHERE s.is_voided = 0 AND s.sale_date >= ? AND s.sale_date <= ?
                ORDER BY s.sale_date"""
-        sale_params = (f"{today_str}%",)
+        sale_params = (f"{today_str} 00:00:00", f"{today_str}T23:59:59")
         payments_from = today_str
         expenses_from = today_str
         purchases_from = today_str
@@ -125,9 +125,13 @@ def today_report(date_from=None, all_time_if_none=False):
     drawer_adj = adjustment_service.adjustment_total("drawer", date_from=drawer_adj_from)
     today_adj = adjustment_service.adjustment_total("today", date_from=today_adj_from)
     online_adj = adjustment_service.adjustment_total("online", date_from=drawer_adj_from)
+    instapay_adj = adjustment_service.adjustment_total("instapay", date_from=drawer_adj_from)
+    vodafone_adj = adjustment_service.adjustment_total("vodafone_cash", date_from=drawer_adj_from)
 
     drawer = payments["cash"] - today_expenses["cash"] - today_purchases["cash"] + drawer_adj
     online = payments["online"] - today_expenses["online"] - today_purchases["online"] + online_adj
+    instapay = payments["instapay"] - today_expenses["instapay"] - today_purchases["instapay"] + instapay_adj
+    vodafone_cash = payments["vodafone_cash"] - today_expenses["vodafone_cash"] - today_purchases["vodafone_cash"] + vodafone_adj
     today_total = total_revenue + today_adj
 
     return {
@@ -146,6 +150,8 @@ def today_report(date_from=None, all_time_if_none=False):
         "purchases": today_purchases,
         "drawer": drawer,
         "online": online,
+        "instapay": instapay,
+        "vodafone_cash": vodafone_cash,
     }
 
 
@@ -255,10 +261,14 @@ def date_range_summary(date_from=None, date_to=None):
     purchases_adj = adjustment_service.adjustment_total("purchases", date_from, date_to)
     net_profit_adj = adjustment_service.adjustment_total("net_profit", date_from, date_to)
     online_adj = adjustment_service.adjustment_total("online", date_from, date_to)
+    instapay_adj = adjustment_service.adjustment_total("instapay", date_from, date_to)
+    vodafone_adj = adjustment_service.adjustment_total("vodafone_cash", date_from, date_to)
 
     total_sales = total_revenue + total_adj
     cash = payments["cash"] - purchases_by_method["cash"] - expenses_by_method["cash"]
     online = payments["online"] - purchases_by_method["online"] - expenses_by_method["online"] + online_adj
+    instapay = payments["instapay"] - purchases_by_method["instapay"] - expenses_by_method["instapay"] + instapay_adj
+    vodafone_cash = payments["vodafone_cash"] - purchases_by_method["vodafone_cash"] - expenses_by_method["vodafone_cash"] + vodafone_adj
     expenses_total += expenses_adj
     purchases_total += purchases_adj
     writeoff_cost = writeoff_service.totals(date_from=date_from, date_to=date_to)["cost_loss"]
@@ -277,6 +287,8 @@ def date_range_summary(date_from=None, date_to=None):
         "potential_net_profit": potential_net_profit,
         "outstanding_debt": total_revenue - realized_revenue,
         "online": online,
+        "instapay": instapay,
+        "vodafone_cash": vodafone_cash,
     }
 
 
@@ -376,7 +388,7 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
         note = f" - {a['note']}" if a["note"] else ""
         entries.append({
             "id": a["id"], "date": a["adjustment_date"], "type": "adjustment",
-            "description": f"Manual adjustment ({a['target']}){note}",
+            "description": f"{'خصم' if a['amount'] < 0 else 'إضافة'} ({a['target']}){note}",
             "debit": abs(a["amount"]) if a["amount"] < 0 else 0,
             "credit": a["amount"] if a["amount"] > 0 else 0,
         })
