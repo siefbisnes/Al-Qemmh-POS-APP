@@ -68,7 +68,11 @@
     <div class="value">{{ drawer|money }}</div>
     <button type="button" class="btn btn-sm" id="toggleReportsDetails" style="margin-top:1rem;">التفاصيل</button>
   </div>
-  <div class="stat-card"><div class="label">اليوم</div><div class="value">{{ today_total|money }}</div></div>
+  <a class="stat-card stat-card-link" href="{{ today_report_url }}" aria-label="فتح معاملات اليوم">
+    <div class="label">اليوم</div>
+    <div class="value">{{ today_total|money }}</div>
+    <span class="stat-card-action">عرض كل معاملات اليوم ←</span>
+  </a>
   <div class="stat-card"><div class="label">InstaPay</div><div class="value">{{ range_summary.instapay|money }}</div></div>
   <div class="stat-card"><div class="label">Vodafone Cash</div><div class="value">{{ range_summary.vodafone_cash|money }}</div></div>
 </div>

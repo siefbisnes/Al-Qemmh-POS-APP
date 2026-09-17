@@ -83,6 +83,10 @@ def index():
     # naturally rolls over at midnight even if the app has been running
     # for days without a restart.
     today_only_report = report_service.today_report()
+    today_key = datetime.now().date().isoformat()
+    today_transactions = report_service.financial_ledger(
+        f"{today_key} 00:00:00", f"{today_key}T23:59:59"
+    )["entries"]
 
     range_summary = report_service.date_range_summary(effective_from, date_to)
     ledger_entries = report_service.financial_ledger(effective_from, date_to)["entries"]
@@ -91,6 +95,7 @@ def index():
         "reports.html",
         drawer=drawer_report["drawer"],
         today_total=today_only_report["today_total"],
+        today_report_url=url_for("reports.today"),
         range_summary=range_summary,
         ledger_entries=ledger_entries,
         adjustment_targets=(
@@ -156,7 +161,17 @@ def delete_ledger_entry(entry_type, entry_id):
 
 @bp.route("/today")
 def today():
-    return render_template("today_report.html", report=report_service.today_report())
+    today_key = datetime.now().date().isoformat()
+    report = report_service.today_report()
+    transactions = report_service.financial_ledger(
+        f"{today_key} 00:00:00", f"{today_key}T23:59:59"
+    )["entries"]
+    return render_template(
+        "today_report.html",
+        report=report,
+        transactions=transactions,
+        today_key=today_key,
+    )
 
 
 @bp.route("/today/export.pdf")

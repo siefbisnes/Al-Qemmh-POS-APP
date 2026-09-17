@@ -1,37 +1,120 @@
 {% extends "base.html" %}
-{% block title %}تقرير اليوم — Al-Qemma{% endblock %}
+{% block title %}معاملات اليوم — القمة{% endblock %}
 {% block content %}
+<style>
+  .today-page { direction: rtl; }
+  .today-hero {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+  .today-hero h1 { margin-bottom: .2rem; }
+  .today-date { color: var(--text-muted); margin: 0; }
+  .today-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .today-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+  }
+  .today-summary .stat-card { min-width: 0; }
+  .today-summary .label { margin-bottom: .35rem; }
+  .today-summary .value { overflow-wrap: anywhere; }
+  .today-ledger-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .85rem;
+  }
+  .today-ledger-head h2 { margin: 0; }
+  .today-count { color: var(--text-muted); font-size: .86rem; }
+  .today-ledger { display: grid; gap: .6rem; }
+  .today-entry {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    padding: .9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .today-entry-time { color: var(--text-muted); font-size: .82rem; direction: ltr; text-align: right; }
+  .today-entry-description { min-width: 0; overflow-wrap: anywhere; }
+  .today-entry-description a { font-weight: 600; }
+  .today-entry-kind { display: block; color: var(--text-muted); font-size: .78rem; margin-top: .2rem; }
+  .today-entry-amount { text-align: left; white-space: nowrap; font-weight: 700; }
+  .today-entry-amount.incoming { color: var(--accent); }
+  .today-entry-amount.outgoing { color: var(--danger); }
+  .today-empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); }
+  .stat-card-link { color: inherit; text-decoration: none; transition: transform .15s ease, border-color .15s ease; }
+  .stat-card-link:hover { text-decoration: none; transform: translateY(-2px); border-color: var(--accent); }
+  .stat-card-action { display: block; margin-top: .65rem; color: var(--accent); font-size: .78rem; font-weight: 600; }
+  @media (max-width: 760px) {
+    .today-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .today-entry { grid-template-columns: 1fr auto; gap: .45rem .75rem; }
+    .today-entry-time { grid-column: 1 / -1; text-align: right; }
+    .today-entry-description { grid-column: 1; }
+    .today-entry-amount { grid-column: 2; grid-row: 2; }
+  }
+  @media (max-width: 420px) {
+    .today-summary { grid-template-columns: 1fr; }
+  }
+</style>
 
-<div class="page-header">
-  <h1>تقرير اليوم</h1>
-  <a href="{{ url_for('reports.today_report_export_pdf') }}" class="btn btn-primary">تحميل PDF</a>
-</div>
+<div class="today-page">
+  <div class="today-hero">
+    <div>
+      <h1>معاملات اليوم</h1>
+      <p class="today-date">{{ today_key }} · هذا اليوم فقط</p>
+    </div>
+    <div class="today-actions">
+      <a href="{{ url_for('reports.index') }}" class="btn">العودة للتقارير</a>
+    </div>
+  </div>
 
-<div dir="rtl" style="text-align:right;">
-  <p class="subtitle">{{ report.date }}</p>
-
-  <div class="stat-grid">
+  <div class="today-summary">
+    <div class="stat-card"><div class="label">إجمالي المبيعات</div><div class="value">{{ report.total_revenue|money }}</div></div>
+    <div class="stat-card"><div class="label">نقدي</div><div class="value">{{ report.payments.cash|money }}</div></div>
     <div class="stat-card"><div class="label">InstaPay</div><div class="value">{{ report.instapay|money }}</div></div>
     <div class="stat-card"><div class="label">Vodafone Cash</div><div class="value">{{ report.vodafone_cash|money }}</div></div>
-    <div class="stat-card"><div class="label">نقدي</div><div class="value">{{ report.payments.cash|money }}</div></div>
-    <div class="stat-card"><div class="label">المصروفات</div><div class="value">{{ report.expenses_total|money }}</div></div>
-    <div class="stat-card"><div class="label">الدرج (نقدي - مصروفات)</div><div class="value">{{ report.drawer|money }}</div></div>
-    <div class="stat-card"><div class="label">الوحدات المباعة</div><div class="value">{{ report.units_sold }}</div></div>
   </div>
 
-  <div class="panel">
-    <h2>ماذا تم بيعه</h2>
-    {% if report.sold_summary %}
-      <table class="data-table">
-        <tr><th>الصنف</th><th>الكمية</th></tr>
-        {% for item in report.sold_summary %}
-          <tr><td>{{ item.product_name }}</td><td>{{ item.quantity }}</td></tr>
+  <section class="panel">
+    <div class="today-ledger-head">
+      <h2>كل معاملات اليوم</h2>
+      <span class="today-count">{{ transactions|length }} عملية</span>
+    </div>
+
+    {% if transactions %}
+      <div class="today-ledger">
+        {% for entry in transactions %}
+          {% set incoming = entry.credit and entry.credit > 0 %}
+          <article class="today-entry">
+            <time class="today-entry-time">{{ (entry.date|localdt).split(' ')[1][:5] if ' ' in (entry.date|localdt) else (entry.date or '')[11:16] }}</time>
+            <div class="today-entry-description">
+              {% if entry.url %}<a href="{{ entry.url }}">{{ entry.description }}</a>{% else %}{{ entry.description }}{% endif %}
+              <span class="today-entry-kind">
+                {% if entry.type == 'sale' %}بيع
+                {% elif entry.type == 'purchase' %}مشتريات
+                {% elif entry.type == 'expense' %}مصروفات
+                {% elif entry.type == 'writeoff' %}هالك
+                {% else %}تعديل{% endif %}
+              </span>
+            </div>
+            <div class="today-entry-amount {{ 'incoming' if incoming else 'outgoing' }}">
+              {{ '+' if incoming else '-' }}{{ (entry.credit if incoming else entry.debit)|money }}
+            </div>
+          </article>
         {% endfor %}
-      </table>
+      </div>
     {% else %}
-      <p>لا توجد مبيعات اليوم حتى الآن.</p>
+      <div class="today-empty">لا توجد معاملات مسجلة اليوم حتى الآن.</div>
     {% endif %}
-  </div>
+  </section>
 </div>
-
 {% endblock %}
