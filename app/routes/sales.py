@@ -149,7 +149,8 @@ def new():
         if is_delivery_order:
             try:
                 order_id = order_service.create_order(
-                    transaction_id, delivery_provider, shipping_cost, shipping_cost_source
+                    transaction_id, delivery_provider, shipping_cost, shipping_cost_source,
+                    sale_date=sale_date,
                 )
             except order_service.OrderError as e:
                 flash(str(e), "error")

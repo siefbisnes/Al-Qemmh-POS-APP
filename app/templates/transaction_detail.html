@@ -8,7 +8,7 @@
     <p class="subtitle">
       العميل: {% if txn.customer_id and txn.customer_name %}<a href="{{ url_for('customers.detail', customer_id=txn.customer_id) }}">{{ txn.customer_name }}</a>{% else %}{{ txn.customer_name or 'عميل عابر' }}{% endif %}
       · {{ txn.customer_phone or '—' }}
-      · {{ txn.created_at[:16] }}
+      · {{ (txn.created_at|localdt).split(' ')[0] }}
     </p>
   </div>
   <div style="display:flex; gap:.5rem; flex-wrap:wrap;">

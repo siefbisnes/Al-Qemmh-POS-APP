@@ -47,7 +47,18 @@ def expenses_by_method(date_from=None, date_to=None):
 
     by_method = {row["payment_method"]: row["total"] for row in rows}
     cash = by_method.get("cash", 0) or 0
-    online = (by_method.get("vodafone_cash", 0) or 0) + (by_method.get("instapay", 0) or 0)
+    # "online" here is a generic tag (see orders.py:create_order() -
+    # shipping-cost expenses only know drawer/online, not the specific
+    # vodafone_cash/instapay split), so it must be folded into the
+    # online total explicitly - it's neither "vodafone_cash" nor
+    # "instapay" and would otherwise silently vanish from this split
+    # entirely (same bug purchases_by_method has for the exact same
+    # reason - see purchases.py).
+    online = (
+        (by_method.get("vodafone_cash", 0) or 0)
+        + (by_method.get("instapay", 0) or 0)
+        + (by_method.get("online", 0) or 0)
+    )
     return {
         "cash": cash,
         "online": online,

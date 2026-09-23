@@ -627,6 +627,20 @@ MIGRATIONS = [
     ("orders.shipping_offset_purchase_id", """
         ALTER TABLE orders ADD COLUMN shipping_offset_purchase_id INTEGER REFERENCES purchases(id) ON DELETE SET NULL
     """),
+    # ---- Shipping-cost reclassified: purchases -> expenses (spec
+    # update). shipping_purchase_id / shipping_offset_purchase_id above
+    # are kept as-is (NOT dropped/reused) so orders created before this
+    # change keep resolving to their original `purchases` rows exactly
+    # as before. New orders use these two instead, pointing at
+    # `expenses`. See app/services/orders.py:create_order() - it now
+    # checks whichever pair of columns is actually populated on a given
+    # order everywhere it needs to clean up/reverse the shipping cost. ----
+    ("orders.shipping_expense_id", """
+        ALTER TABLE orders ADD COLUMN shipping_expense_id INTEGER REFERENCES expenses(id) ON DELETE SET NULL
+    """),
+    ("orders.shipping_offset_expense_id", """
+        ALTER TABLE orders ADD COLUMN shipping_offset_expense_id INTEGER REFERENCES expenses(id) ON DELETE SET NULL
+    """),
     # ---- Product audit log (see schema.sql for the full column-by-
     # column rationale) ----
     ("product_audit_log table", """

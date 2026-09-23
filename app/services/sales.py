@@ -449,7 +449,24 @@ def delete_transaction(transaction_id):
             delete_sale_line(row["id"], cur=cur)
 
 
+def _normalize_datetime_filter(value, end_of_day=False):
+    """Pads a bare 'YYYY-MM-DD' date into a full timestamp so string
+    comparison against created_at/sale_date (which always carries a
+    time component, even '...T00:00:00' for a custom-picked date)
+    behaves correctly. Without this, 'sale_date <= date_to' with a
+    bare date excludes every sale that happened ON date_to itself,
+    since e.g. '2026-09-05T00:00:00' > '2026-09-05' as plain strings.
+    Same fix already applied in adjustments.py/expenses.py."""
+    if not value or not isinstance(value, str):
+        return value
+    if len(value) == 10:
+        return value + (" 23:59:59" if end_of_day else " 00:00:00")
+    return value
+
+
 def list_sales(product_id=None, date_from=None, date_to=None, include_voided=False, query=None):
+    date_from = _normalize_datetime_filter(date_from)
+    date_to = _normalize_datetime_filter(date_to, end_of_day=True)
     sql = """
         SELECT s.*, COALESCE(NULLIF(TRIM(s.custom_product_name), ''), s.service_description, p.name) AS product_name
         FROM sales s JOIN products p ON p.id = s.product_id
@@ -600,6 +617,8 @@ def list_transactions(date_from=None, date_to=None, query=None):
     list_sales/get_transaction); a transaction whose every line was
     voided simply won't appear, matching how it already disappears from
     per-line history today."""
+    date_from = _normalize_datetime_filter(date_from)
+    date_to = _normalize_datetime_filter(date_to, end_of_day=True)
     sql = """
         SELECT
             t.id AS transaction_id,

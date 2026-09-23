@@ -582,12 +582,7 @@
           <input type="checkbox" name="receipt_requested" id="receiptCheckbox" style="width:auto;">
           إنشاء إيصال لهذا البيع
         </label>
-        <div id="receiptFormatRow" style="display:none; margin-top:.5rem;">
-          <label style="display:flex; gap:1rem;">
-            <span><input type="radio" name="receipt_format" value="pdf" checked style="width:auto;"> PDF</span>
-            <span><input type="radio" name="receipt_format" value="excel" style="width:auto;"> Excel</span>
-          </label>
-        </div>
+        <input type="hidden" name="receipt_format" value="pdf">
         <div id="customerProcessRow" style="display:none; margin-top:.75rem;">
           <label style="display:flex; align-items:center; gap:.5rem; font-weight:600;">
             <input type="checkbox" name="customer_process" id="customerProcessCheckbox" style="width:auto;">
@@ -986,10 +981,6 @@
     addLine(serviceLineTemplate);
   });
 
-  document.getElementById("receiptCheckbox").addEventListener("change", (e) => {
-    document.getElementById("receiptFormatRow").style.display = e.target.checked ? "block" : "none";
-  });
-
   function fillLineWithProduct(targetLineEl, p) {
     targetLineEl.querySelector(".line-product-id").value = p.id;
     targetLineEl.querySelector(".selected-product-label").value = p.name;
@@ -1152,6 +1143,12 @@
   // Add initial empty payment row on load if none exists
   if (paymentsContainer.querySelectorAll(".payment-row").length === 0) {
     addPaymentRow();
+  }
+
+  // Pre-fill a cart line when arriving from "تسجيل البيع" on a specific
+  // product (?product_id=<id> -> preselected_id -> defaultProductId).
+  if (defaultProductId) {
+    addLineFromProduct(defaultProductId);
   }
 })();
 </script>

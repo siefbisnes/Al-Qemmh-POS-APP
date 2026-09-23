@@ -80,20 +80,28 @@ def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost
         confirm_payment() at وصل.
       - shipping_cost (delivery EXPENSE): charged immediately, since
         the shipping cost is paid out at drop-off regardless of whether
-        the order is ever collected. Booked as a normal `purchases` row
+        the order is ever collected. Booked as a normal `expenses` row
         on the chosen side (shipping_cost_source: 'drawer' | 'online'),
         going through the exact same Drawer/Online split Reports and
-        the Owner Dashboard already use for every other purchase.
+        the Owner Dashboard already use for every other expense.
 
-        A SECOND, offsetting purchases row is booked on the OTHER
-        side with a NEGATIVE cost of the same amount - a purchases row
-        with negative cost reduces that bucket's total purchases,
+        (Reclassified from `purchases` to `expenses` per spec update -
+        شحن الاوردر is now categorized under المصروفات, not المشتريات.
+        Old orders created before this change keep their original
+        `purchases` rows exactly as they were - see
+        shipping_purchase_id/shipping_offset_purchase_id below, still
+        read by every function in this module that needs to clean up
+        or reverse a shipping cost.)
+
+        A SECOND, offsetting expenses row is booked on the OTHER
+        side with a NEGATIVE amount of the same value - an expenses row
+        with negative amount reduces that bucket's total expenses,
         which is mathematically identical to a credit/inflow wherever
-        Reports sums "payments - purchases" per bucket. Net effect:
+        Reports sums "payments - expenses - purchases" per bucket. Net effect:
           - the chosen side goes down by shipping_cost (real expense)
           - the other side goes UP by shipping_cost (offsetting credit)
-          - net profit is unaffected (the two purchases rows cancel out
-            in any total-purchases-across-both-buckets sum)
+          - net profit is unaffected (the two expenses rows cancel out
+            in any total-expenses-across-both-buckets sum)
         This models "the shipping fee is paid from one bucket but the
         same amount is transferred over from the other to cover it" -
         a pure drawer↔online rebalancing, not a real second expense.
@@ -133,51 +141,55 @@ def create_order(transaction_id, delivery_provider, shipping_cost, shipping_cost
         ).fetchone()
         order_amount = float(total_row["total"] or 0)
 
-        shipping_purchase_id = None
-        shipping_offset_purchase_id = None
+        shipping_expense_id = None
+        shipping_offset_expense_id = None
         if shipping_cost > 0:
             # payment_method here follows the existing purchases/expenses
             # convention (cash | online), same binary Reports already
             # splits Drawer vs Online by - NOT the sale_payments 3-way
             # (cash/vodafone_cash/instapay), which is a different table
             # for a different kind of money movement (money received,
-            # not money paid out).
-            purchase_method = "cash" if shipping_cost_source == "drawer" else "online"
+            # not money paid out). "online" is a generic tag here (not
+            # one of expenses' validated cash/vodafone_cash/instapay
+            # values) - see expenses.py:expenses_by_method(), which
+            # folds it into the online total explicitly.
+            expense_method = "cash" if shipping_cost_source == "drawer" else "online"
             offset_method = "online" if shipping_cost_source == "drawer" else "cash"
+            expense_date = created_at or datetime.utcnow().isoformat(sep=" ", timespec="seconds")
 
             cur.execute(
-                "INSERT INTO purchases (name, cost, payment_method) VALUES (?, ?, ?)",
-                (f"شحن اوردر — {delivery_provider}", shipping_cost, purchase_method),
+                "INSERT INTO expenses (description, amount, payment_method, expense_date) VALUES (?, ?, ?, ?)",
+                (f"شحن اوردر — {delivery_provider}", shipping_cost, expense_method, expense_date),
             )
-            shipping_purchase_id = cur.lastrowid
+            shipping_expense_id = cur.lastrowid
 
             cur.execute(
-                "INSERT INTO purchases (name, cost, payment_method) VALUES (?, ?, ?)",
-                (f"تحويل مقابل شحن اوردر — {delivery_provider}", -shipping_cost, offset_method),
+                "INSERT INTO expenses (description, amount, payment_method, expense_date) VALUES (?, ?, ?, ?)",
+                (f"تحويل مقابل شحن اوردر — {delivery_provider}", -shipping_cost, offset_method, expense_date),
             )
-            shipping_offset_purchase_id = cur.lastrowid
+            shipping_offset_expense_id = cur.lastrowid
 
         if created_at:
             cur.execute(
                 """INSERT INTO orders
                    (transaction_id, delivery_provider, status, order_amount,
-                    shipping_cost, shipping_cost_source, shipping_purchase_id,
-                    shipping_offset_purchase_id, created_at)
+                    shipping_cost, shipping_cost_source, shipping_expense_id,
+                    shipping_offset_expense_id, created_at)
                    VALUES (?, ?, 'preparing', ?, ?, ?, ?, ?, ?)""",
                 (transaction_id, delivery_provider, order_amount,
-                 shipping_cost, shipping_cost_source, shipping_purchase_id,
-                 shipping_offset_purchase_id, created_at),
+                 shipping_cost, shipping_cost_source, shipping_expense_id,
+                 shipping_offset_expense_id, created_at),
             )
         else:
             cur.execute(
                 """INSERT INTO orders
                    (transaction_id, delivery_provider, status, order_amount,
-                    shipping_cost, shipping_cost_source, shipping_purchase_id,
-                    shipping_offset_purchase_id)
+                    shipping_cost, shipping_cost_source, shipping_expense_id,
+                    shipping_offset_expense_id)
                    VALUES (?, ?, 'preparing', ?, ?, ?, ?, ?)""",
                 (transaction_id, delivery_provider, order_amount,
-                 shipping_cost, shipping_cost_source, shipping_purchase_id,
-                 shipping_offset_purchase_id),
+                 shipping_cost, shipping_cost_source, shipping_expense_id,
+                 shipping_offset_expense_id),
             )
         order_id = cur.lastrowid
         cur.execute(
@@ -497,18 +509,25 @@ def order_age_display(order):
 # app/db.py: PRAGMA foreign_keys = ON is set per-connection, and
 # sale_payments already cascades the same way for the same reason).
 # The one thing that ISN'T reachable by a DB foreign key is the
-# `purchases` row booked for the shipping cost - purchases is a general
-# ledger table with no relationship back to orders. This must be
-# cleaned up explicitly, and BEFORE the transaction row disappears
-# (call from the sale-deletion route while order/transaction still
-# exist), so a deleted delivery order truly leaves no trace in the
-# drawer/online totals (§20).
+# `expenses` row booked for the shipping cost (or `purchases`, for an
+# order created before the purchases->expenses reclassification) -
+# both are general ledger tables with no relationship back to orders.
+# This must be cleaned up explicitly, and BEFORE the transaction row
+# disappears (call from the sale-deletion route while order/transaction
+# still exist), so a deleted delivery order truly leaves no trace in
+# the drawer/online totals (§20).
 
 def cleanup_before_transaction_delete(transaction_id):
     order = get_order_by_transaction(transaction_id)
     if not order:
         return
     with db_cursor(commit=True) as cur:
+        for key in ("shipping_expense_id", "shipping_offset_expense_id"):
+            if order.get(key):
+                cur.execute("DELETE FROM expenses WHERE id = ?", (order[key],))
+        # Legacy orders created before the purchases->expenses
+        # reclassification still have their shipping cost booked in
+        # `purchases` instead - clean those up too.
         for key in ("shipping_purchase_id", "shipping_offset_purchase_id"):
             if order.get(key):
                 cur.execute("DELETE FROM purchases WHERE id = ?", (order[key],))
@@ -532,7 +551,7 @@ def cleanup_before_transaction_delete(transaction_id):
 
 def apply_return_shipping_bearer(transaction_id, shipping_cost_bearer):
     """Used by the ارجاع (return) flow specifically - NOT by plain حذف.
-    Decides what happens to the shipping-cost purchase row (and its
+    Decides what happens to the shipping-cost expense row (and its
     offsetting drawer↔online transfer row - see create_order()) when an
     order is being reversed:
 
@@ -548,11 +567,15 @@ def apply_return_shipping_bearer(transaction_id, shipping_cost_bearer):
         same as plain حذف, fully reversing the transfer too.
 
     Call this BEFORE sales_service.delete_transaction() - it needs the
-    order/transaction to still exist to look up the purchase ids."""
+    order/transaction to still exist to look up the expense/purchase ids."""
     order = get_order_by_transaction(transaction_id)
     if not order or shipping_cost_bearer == "shop":
         return
     with db_cursor(commit=True) as cur:
+        for key in ("shipping_expense_id", "shipping_offset_expense_id"):
+            if order.get(key):
+                cur.execute("DELETE FROM expenses WHERE id = ?", (order[key],))
+        # Legacy orders (pre purchases->expenses reclassification).
         for key in ("shipping_purchase_id", "shipping_offset_purchase_id"):
             if order.get(key):
                 cur.execute("DELETE FROM purchases WHERE id = ?", (order[key],))

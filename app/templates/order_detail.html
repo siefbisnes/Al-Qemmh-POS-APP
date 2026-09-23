@@ -84,7 +84,7 @@
       <label>تكلفة الشحن</label>
       <div>
         {{ order.shipping_cost|money }} — تم خصمها من {{ 'الدرج' if order.shipping_cost_source == 'drawer' else 'التحويلات الأونلاين' }}
-        {% if order.shipping_offset_purchase_id %}
+        {% if order.shipping_offset_expense_id or order.shipping_offset_purchase_id %}
           <br>
           <span class="subtitle">
             وتم تحويل {{ order.shipping_cost|money }} مقابلها إلى {{ 'التحويلات الأونلاين' if order.shipping_cost_source == 'drawer' else 'الدرج' }} — لا تأثير على صافي الربح.

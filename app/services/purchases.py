@@ -87,7 +87,16 @@ def purchases_by_method(date_from=None, date_to=None):
         rows = cur.execute(query, params).fetchall()
     by_method = {row["payment_method"]: row["total"] for row in rows}
     cash = by_method.get("cash", 0) or 0
-    online = (by_method.get("vodafone_cash", 0) or 0) + (by_method.get("instapay", 0) or 0)
+    # "online" here is a generic tag legacy shipping-cost purchase rows
+    # use (orders.py:create_order(), pre-reclassification) - it's
+    # neither "vodafone_cash" nor "instapay" and was previously
+    # invisible to this split entirely, meaning the online-bucket
+    # deduction for old shipping-cost purchases never actually applied.
+    online = (
+        (by_method.get("vodafone_cash", 0) or 0)
+        + (by_method.get("instapay", 0) or 0)
+        + (by_method.get("online", 0) or 0)
+    )
     return {
         "cash": cash,
         "online": online,
