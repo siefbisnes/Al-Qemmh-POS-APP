@@ -397,6 +397,121 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
     return {"entries": entries, "grouped": _group_ledger(entries, group_by)}
 
 
+def method_ledger(method, query=None, date_from=None, date_to=None):
+    """All interactions for one bucket - درج ('cash') / Vodafone Cash
+    ('vodafone_cash') / InstaPay ('instapay') - built from the exact same
+    four sources today_report()/date_range_summary() already sum for
+    that bucket (money received minus purchases/expenses paid that way,
+    plus manual adjustments targeting it) - see those two functions'
+    `drawer`/`vodafone_cash`/`instapay` lines above.
+
+    No reset-scoping: "إعادة ضبط التقارير" was removed, so unlike
+    financial_ledger() (which the Reports page still date-scopes) this
+    always covers everything since the DB started recording this method
+    unless date_from/date_to are explicitly passed - there's no way to
+    reconstruct what came before that.
+
+    A shipping-cost purchase/expense tagged the generic "online" method
+    (see orders.py:create_order() - an order only knows drawer-vs-online,
+    not which specific wallet) intentionally does NOT show up here for
+    method='vodafone_cash' or 'instapay' - it isn't subtracted from
+    either bucket specifically in the totals this mirrors either, only
+    from a separate broader "online" total.
+
+    انستا بريد (instabarid) has no dedicated card/page of its own -
+    method='instapay' also pulls anything tagged 'instabarid', matching
+    how payment_totals()/purchases_by_method()/expenses_by_method()
+    already fold it into their own "instapay" figure.
+    """
+    from app.services import expenses as expense_service
+    from app.services import purchases as purchase_service
+    from app.services import adjustments as adjustment_service
+    from app.services.sales import receipt_number
+    from flask import url_for
+
+    methods = [method, "instabarid"] if method == "instapay" else [method]
+
+    def _pad(value, sep, end_of_day):
+        if value and isinstance(value, str) and len(value) == 10:
+            return value + (f"{sep}23:59:59" if end_of_day else f"{sep}00:00:00")
+        return value
+
+    # sale_payments.created_at is written T-separated (Python isoformat,
+    # see sales.py); purchases.purchase_date/expenses.expense_date default
+    # to SQLite's datetime('now'), which is space-separated. A bare
+    # "YYYY-MM-DD" from the date-range filter has to be padded to match
+    # whichever column it's actually being compared against, or it
+    # silently excludes everything on the date_to day itself (same class
+    # of bug already fixed in sales.py/customer_reports.py).
+    payments_date_from = _pad(date_from, "T", end_of_day=False)
+    payments_date_to = _pad(date_to, "T", end_of_day=True)
+    ledger_date_from = _pad(date_from, " ", end_of_day=False)
+    ledger_date_to = _pad(date_to, " ", end_of_day=True)
+
+    entries = []
+
+    payments_query = f"""
+        SELECT sp.id AS id, sp.amount, sp.created_at, sp.transaction_id,
+               t.receipt_number AS stored_receipt_number,
+               (SELECT MAX(NULLIF(TRIM(s.customer_name), ''))
+                FROM sales s WHERE s.transaction_id = sp.transaction_id) AS customer_name
+        FROM sale_payments sp
+        LEFT JOIN transactions t ON t.id = sp.transaction_id
+        WHERE sp.method IN ({','.join('?' for _ in methods)})
+    """
+    params = list(methods)
+    if payments_date_from:
+        payments_query += " AND sp.created_at >= ?"
+        params.append(payments_date_from)
+    if payments_date_to:
+        payments_query += " AND sp.created_at <= ?"
+        params.append(payments_date_to)
+    with db_cursor() as cur:
+        payment_rows = cur.execute(payments_query, params).fetchall()
+    for r in payment_rows:
+        if r["transaction_id"]:
+            invoice_label = receipt_number(r["transaction_id"], r["created_at"], stored=r["stored_receipt_number"])
+            label = f"دفعة {invoice_label}" + (f" — {r['customer_name']}" if r["customer_name"] else "")
+            url = url_for("sales.transaction_detail", transaction_id=r["transaction_id"])
+        else:
+            label = "دفعة"
+            url = None
+        entries.append({"id": r["id"], "date": r["created_at"], "type": "payment",
+                         "description": label, "url": url, "debit": 0, "credit": r["amount"]})
+
+    for p in purchase_service.list_purchases(ledger_date_from, ledger_date_to):
+        if p["payment_method"] not in methods:
+            continue
+        entries.append({"id": p["id"], "date": p["purchase_date"], "type": "purchase",
+                         "description": p["name"], "debit": p["cost"], "credit": 0})
+
+    for e in expense_service.list_expenses(ledger_date_from, ledger_date_to):
+        if e["payment_method"] not in methods:
+            continue
+        entries.append({"id": e["id"], "date": e["expense_date"], "type": "expense",
+                         "description": e["description"], "debit": e["amount"], "credit": 0})
+
+    # list_adjustments() already normalizes its own date_from/date_to
+    # internally (see adjustments.py) - pass the raw bare dates through.
+    for a in adjustment_service.list_adjustments(date_from, date_to):
+        if a["target"] != method:
+            continue
+        note = f" - {a['note']}" if a["note"] else ""
+        entries.append({
+            "id": a["id"], "date": a["adjustment_date"], "type": "adjustment",
+            "description": f"{'خصم' if a['amount'] < 0 else 'إضافة'}{note}",
+            "debit": abs(a["amount"]) if a["amount"] < 0 else 0,
+            "credit": a["amount"] if a["amount"] > 0 else 0,
+        })
+
+    if query:
+        needle = query.lower()
+        entries = [e for e in entries if needle in (e.get("description") or "").lower()]
+
+    _sort_ledger_entries(entries)
+    return entries
+
+
 def _normalize_ledger_date(date_str):
     """Normalizes the date/time separator only (never the digits): some
     entries are stamped by SQLite's own datetime('now') default, which

@@ -1,6 +1,38 @@
 from app.db import db_cursor
 
 
+def _normalize_datetime_filter(value, end_of_day=False):
+    """sp.created_at is always written T-separated (sales.py uses Python's
+    datetime.isoformat(), default separator 'T'). Two different callers
+    pass values here that DON'T match that format:
+
+      1. reports_reset_at (routes/reports.py) is stored SPACE-separated
+         ("2026-09-22 02:30:00"). In plain SQL string comparison, 'T'
+         (0x54) sorts after a space (0x20) - so for ANY timestamp on the
+         same calendar day as the reset, "...T14:00:00" >= "...  02:30:00"
+         is true purely from that one character, regardless of whether
+         14:00 is actually before or after the real reset time. This is
+         why totals kept including pre-reset payments made earlier the
+         same day.
+
+      2. An explicit "من/إلى" filter date is a bare "YYYY-MM-DD" (from an
+         HTML date input) with no time component at all. Bare dates work
+         fine as an inclusive lower bound (date_from) since any same-day
+         timestamp naturally sorts after a shorter, otherwise-identical
+         prefix - but as an upper bound (date_to), sp.created_at <=
+         '2026-09-22' excludes every payment made ON that day, since
+         '2026-09-22T14:00:00' > '2026-09-22' as a plain string. Same bug
+         class already fixed for sales.py's list_transactions/list_sales.
+
+    Normalizing to 'T'-separated (and padding a bare date to the right
+    end of that day) fixes both at once."""
+    if not value or not isinstance(value, str):
+        return value
+    if len(value) == 10:
+        return value + ("T23:59:59" if end_of_day else "T00:00:00")
+    return value.replace(" ", "T", 1)
+
+
 def _money(value):
     try:
         return float(value or 0)
@@ -37,6 +69,8 @@ CLAMP_OVERPAYMENT_TO_ZERO = True
 
 def payment_totals(date_from=None, date_to=None):
     """Money received by payment date, not by sale date."""
+    date_from = _normalize_datetime_filter(date_from)
+    date_to = _normalize_datetime_filter(date_to, end_of_day=True)
     query = """
         SELECT sp.method, SUM(sp.amount) AS total
         FROM sale_payments sp
@@ -67,7 +101,10 @@ def payment_totals(date_from=None, date_to=None):
         + (by_method.get("instabarid", 0) or 0)
     )
     vodafone_cash = by_method.get("vodafone_cash", 0) or 0
-    instapay = by_method.get("instapay", 0) or 0
+    # انستا بريد has no dedicated card/page of its own - it counts as
+    # InstaPay for that specific bucket, same as it already did for the
+    # broader "online" total above.
+    instapay = (by_method.get("instapay", 0) or 0) + (by_method.get("instabarid", 0) or 0)
     return {
         "cash": cash,
         "online": online,

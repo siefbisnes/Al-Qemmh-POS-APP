@@ -208,10 +208,14 @@ def new():
         ]
     service_placeholder_id = product_service.get_service_placeholder_product()
     default_sale_date = date.today().isoformat()
+    # انستا بريد removed from the normal-sale payment options specifically
+    # (per spec) - PAYMENT_METHODS itself is untouched, so the delivery
+    # order payment-confirmation flow (order_detail.html) still offers it.
+    sale_payment_methods = [pm for pm in sales_service.PAYMENT_METHODS if pm[0] != "instabarid"]
     return render_template(
         "sales_new.html", products=available_products, preselected_id=preselected_id,
         service_placeholder_id=service_placeholder_id,
-        payment_methods=sales_service.PAYMENT_METHODS, default_warranty_days=settings_service.warranty_days(),
+        payment_methods=sale_payment_methods, default_warranty_days=settings_service.warranty_days(),
         default_sale_date=default_sale_date,
         delivery_providers=order_service.list_providers(),
     )

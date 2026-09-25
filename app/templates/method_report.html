@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — القمة{% endblock %}
+{% block content %}
+<style>
+  .method-page { direction: rtl; }
+  .method-hero {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+  .method-hero h1 { margin-bottom: .2rem; }
+  .method-sub { color: var(--text-muted); margin: 0; }
+  .method-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .method-ledger-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .85rem;
+  }
+  .method-ledger-head h2 { margin: 0; }
+  .method-count { color: var(--text-muted); font-size: .86rem; }
+  .method-ledger { display: grid; gap: .6rem; }
+  .method-entry {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    padding: .9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .method-entry-description { min-width: 0; overflow-wrap: anywhere; }
+  .method-entry-description a { font-weight: 600; }
+  .method-entry-kind { display: block; color: var(--text-muted); font-size: .78rem; margin-top: .2rem; }
+  .method-entry-amount { text-align: left; white-space: nowrap; font-weight: 700; }
+  .method-entry-amount.incoming { color: var(--accent); }
+  .method-entry-amount.outgoing { color: var(--danger); }
+  .method-empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); }
+  @media (max-width: 760px) {
+    .method-entry { grid-template-columns: 1fr auto; gap: .45rem .75rem; }
+  }
+</style>
+
+<div class="method-page">
+  <div class="method-hero">
+    <div>
+      <h1>{{ title }}</h1>
+      <p class="method-sub">كل المعاملات منذ بداية تسجيل هذه البيانات</p>
+    </div>
+    <div class="method-actions">
+      <a href="{{ url_for('reports.index') }}" class="btn">العودة للتقارير</a>
+    </div>
+  </div>
+
+  <form class="toolbar" method="get" style="margin-bottom:1.25rem;">
+    <div class="field" style="margin:0;">
+      <label>بحث</label>
+      <input type="search" name="q" value="{{ search or '' }}" placeholder="ابحث في المعاملات">
+    </div>
+    <div class="field" style="margin:0;"><label>من</label><input type="date" name="from" value="{{ date_from or '' }}"></div>
+    <div class="field" style="margin:0;"><label>إلى</label><input type="date" name="to" value="{{ date_to or '' }}"></div>
+    <button type="submit" class="btn" style="align-self:flex-end;">تصفية</button>
+    {% if search or date_from or date_to %}
+      <a href="{{ url_for(page_endpoint) }}" class="btn btn-sm" style="align-self:flex-end;">مسح</a>
+    {% endif %}
+  </form>
+
+  <section class="panel">
+    <div class="method-ledger-head">
+      <h2>كل المعاملات</h2>
+      <span class="method-count">{{ entries|length }} عملية</span>
+    </div>
+
+    {% if entries %}
+      <div class="method-ledger">
+        {% for entry in entries %}
+          {% set incoming = entry.credit and entry.credit > 0 %}
+          <article class="method-entry">
+            <div class="method-entry-description">
+              {% if entry.url %}<a href="{{ entry.url }}">{{ entry.description }}</a>{% else %}{{ entry.description }}{% endif %}
+              <span class="method-entry-kind">
+                {% if entry.type == 'payment' %}دفعة
+                {% elif entry.type == 'purchase' %}مشتريات
+                {% elif entry.type == 'expense' %}مصروفات
+                {% else %}تعديل{% endif %}
+              </span>
+            </div>
+            <div class="method-entry-amount {{ 'incoming' if incoming else 'outgoing' }}">
+              {{ '+' if incoming else '-' }}{{ (entry.credit if incoming else entry.debit)|money }}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="method-empty">لا توجد معاملات مطابقة.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

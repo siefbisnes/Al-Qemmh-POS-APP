@@ -35,7 +35,7 @@
   .today-ledger { display: grid; gap: .6rem; }
   .today-entry {
     display: grid;
-    grid-template-columns: 7rem minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 1rem;
     padding: .9rem 1rem;
@@ -43,7 +43,6 @@
     border-radius: var(--radius-sm);
     background: var(--surface);
   }
-  .today-entry-time { color: var(--text-muted); font-size: .82rem; direction: ltr; text-align: right; }
   .today-entry-description { min-width: 0; overflow-wrap: anywhere; }
   .today-entry-description a { font-weight: 600; }
   .today-entry-kind { display: block; color: var(--text-muted); font-size: .78rem; margin-top: .2rem; }
@@ -57,9 +56,6 @@
   @media (max-width: 760px) {
     .today-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .today-entry { grid-template-columns: 1fr auto; gap: .45rem .75rem; }
-    .today-entry-time { grid-column: 1 / -1; text-align: right; }
-    .today-entry-description { grid-column: 1; }
-    .today-entry-amount { grid-column: 2; grid-row: 2; }
   }
   @media (max-width: 420px) {
     .today-summary { grid-template-columns: 1fr; }
@@ -76,6 +72,17 @@
       <a href="{{ url_for('reports.index') }}" class="btn">العودة للتقارير</a>
     </div>
   </div>
+
+  <form class="toolbar" method="get" style="margin-bottom:1.25rem;">
+    <div class="field" style="margin:0;">
+      <label>بحث</label>
+      <input type="search" name="q" value="{{ search or '' }}" placeholder="ابحث في معاملات اليوم">
+    </div>
+    <button type="submit" class="btn" style="align-self:flex-end;">تصفية</button>
+    {% if search %}
+      <a href="{{ url_for('reports.today') }}" class="btn btn-sm" style="align-self:flex-end;">مسح البحث</a>
+    {% endif %}
+  </form>
 
   <div class="today-summary">
     <div class="stat-card"><div class="label">إجمالي المبيعات</div><div class="value">{{ report.total_revenue|money }}</div></div>
@@ -95,7 +102,6 @@
         {% for entry in transactions %}
           {% set incoming = entry.credit and entry.credit > 0 %}
           <article class="today-entry">
-            <time class="today-entry-time">{{ (entry.date|localdt).split(' ')[1][:5] if ' ' in (entry.date|localdt) else (entry.date or '')[11:16] }}</time>
             <div class="today-entry-description">
               {% if entry.url %}<a href="{{ entry.url }}">{{ entry.description }}</a>{% else %}{{ entry.description }}{% endif %}
               <span class="today-entry-kind">

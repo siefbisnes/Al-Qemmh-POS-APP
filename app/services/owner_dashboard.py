@@ -40,29 +40,11 @@ def _parse_timeframe(timeframe: str) -> dict:
     return TIMEFRAMES.get(key, TIMEFRAMES[DEFAULT_TIMEFRAME]) | {"key": key if key in TIMEFRAMES else DEFAULT_TIMEFRAME}
 
 
-def _range_for(timeframe: str, reset_at: str | None = None):
-    """start/end for the requested rolling window (e.g. "last 30 days").
-
-    reset_at: when إعادة ضبط التقارير has been used, this is
-    settings.reports_reset_at. If it falls *after* the window's natural
-    start, the window's start is pulled forward to it - so a report
-    reset earlier today or last week actually clips how far back the
-    analytics KPIs/charts look, instead of silently ignoring the reset
-    the way the rest of the Reports page never did (the reset bug).
-    A reset_at that's older than the window's natural start changes
-    nothing, since the window was already narrower than "everything
-    since the reset" in that case.
-    """
+def _range_for(timeframe: str):
+    """start/end for the requested rolling window (e.g. "last 30 days")."""
     meta = _parse_timeframe(timeframe)
     end = date.today()
     start = end - timedelta(days=meta["days"] - 1)
-    if reset_at:
-        try:
-            reset_date = date.fromisoformat((reset_at or "")[:10])
-            if reset_date > start:
-                start = reset_date
-        except ValueError:
-            pass
     return start.isoformat(), (end.isoformat() + "T23:59:59"), meta
 
 
@@ -526,18 +508,8 @@ def kpis(date_from, date_to):
     }
 
 
-def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME, reset_at: str | None = None) -> dict:
-    # reset_at is accepted for backward compatibility with existing
-    # callers but intentionally unused here now: clipping this section's
-    # date range to "since the last reset" meant every timeframe tab
-    # (weekly/monthly/6months/yearly) could collapse to a single
-    # near-empty bucket whenever a reset had been used recently, breaking
-    # revenue/profit/purchases-vs-expected regardless of which tab was
-    # selected. Analytics here always reflects the timeframe's own full
-    # natural window - إعادة ضبط التقارير still correctly zeroes the
-    # separate cash-drawer totals on the main Reports page (reports.py),
-    # which this doesn't touch.
-    date_from, date_to, meta = _range_for(timeframe, reset_at=reset_at)
+def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME) -> dict:
+    date_from, date_to, meta = _range_for(timeframe)
     bucket = meta["bucket"]
 
     stock = stagnant_and_damaged(date_from=date_from, date_to=date_to)

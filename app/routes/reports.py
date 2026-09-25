@@ -9,7 +9,6 @@ from app.services import receipts as receipt_service
 from app.services import expenses as expense_service
 from app.services import purchases as purchase_service
 from app.services import adjustments as adjustment_service
-from app.services import settings as settings_service
 from app.services import owner_dashboard as owner_service
 from app.services import sales as sales_service
 from app.services import writeoffs as writeoff_service
@@ -29,20 +28,12 @@ _LEDGER_DELETERS = {
 }
 
 
-def _effective_date_from(date_from):
-    """If the user picked an explicit start date, that always wins. Otherwise,
-    if "Reset Reports" has been used, totals start from that point instead
-    of all-time."""
-    return date_from or settings_service.get("reports_reset_at")
-
-
 def _build_report(date_from, date_to):
     """Kept for the existing Excel export route - unrelated to the
     stat cards on the page itself."""
-    effective_from = _effective_date_from(date_from)
-    payments = report_service.payment_totals(effective_from, date_to)
-    expenses_total = expense_service.total_expenses(effective_from, date_to)
-    purchases_by_method = purchase_service.purchases_by_method(effective_from, date_to)
+    payments = report_service.payment_totals(date_from, date_to)
+    expenses_total = expense_service.total_expenses(date_from, date_to)
+    purchases_by_method = purchase_service.purchases_by_method(date_from, date_to)
     cash = payments["cash"] - purchases_by_method["cash"]
     online = payments["online"] - purchases_by_method["online"]
     return {
@@ -57,45 +48,29 @@ def _build_report(date_from, date_to):
 def index():
     date_from = request.args.get("from") or None
     date_to = request.args.get("to") or None
-    effective_from = _effective_date_from(date_from)
-    reset_at = settings_service.get("reports_reset_at")
 
-    today_date_from = reset_at if date_from is None else None
-
-    # Drawer card: intentionally scoped to "since the last manual reset"
-    # (or all-time if reports have never been reset) - that's the whole
-    # point of the الدرج card and the "إعادة ضبط التقارير" button.
+    # الدرج: the explicit "من" filter if the user set one, all-time
+    # otherwise. (إعادة ضبط التقارير removed entirely - no more
+    # reset-point concept here.)
     drawer_report = report_service.today_report(
-        date_from=today_date_from,
-        all_time_if_none=(today_date_from is None),
+        date_from=date_from,
+        all_time_if_none=(date_from is None),
     )
 
-    # BUG FIX (اليوم card never actually reset daily): this card was
-    # previously read from the same drawer_report call above, which uses
-    # reset_at (or all-time) as its date_from - never "today". So اليوم
-    # was really showing "everything since the last manual reset" (or
-    # all-time if reports were never reset), and only ever looked like a
-    # daily reset by coincidence if someone happened to click "إعادة ضبط
-    # التقارير" at midnight. A calendar-day reset must not depend on that
-    # manual action at all. Calling today_report() with no arguments
-    # takes its `else` branch (see app/services/reports.py), which always
-    # scopes to date.today() - re-evaluated fresh on every request, so it
-    # naturally rolls over at midnight even if the app has been running
-    # for days without a restart.
     today_only_report = report_service.today_report()
     today_key = datetime.now().date().isoformat()
-    today_transactions = report_service.financial_ledger(
-        f"{today_key} 00:00:00", f"{today_key}T23:59:59"
-    )["entries"]
 
-    range_summary = report_service.date_range_summary(effective_from, date_to)
-    ledger_entries = report_service.financial_ledger(effective_from, date_to)["entries"]
+    range_summary = report_service.date_range_summary(date_from, date_to)
+    ledger_entries = report_service.financial_ledger(date_from, date_to)["entries"]
 
     return render_template(
         "reports.html",
         drawer=drawer_report["drawer"],
         today_total=today_only_report["today_total"],
         today_report_url=url_for("reports.today"),
+        drawer_report_url=url_for("reports.drawer"),
+        vodafone_cash_report_url=url_for("reports.vodafone_cash"),
+        instapay_report_url=url_for("reports.instapay"),
         range_summary=range_summary,
         ledger_entries=ledger_entries,
         adjustment_targets=(
@@ -105,9 +80,6 @@ def index():
         ),
         date_from=date_from,
         date_to=date_to,
-        reset_at=reset_at,
-        # Only used by the admin-only analytics section further down the
-        # page; harmless to pass regardless of role.
         default_timeframe=owner_service.DEFAULT_TIMEFRAME,
     )
 
@@ -129,25 +101,8 @@ def adjust():
     return redirect(url_for("reports.index", **request.args))
 
 
-@bp.route("/clear", methods=["POST"])
-def clear():
-    settings_service.set(
-        "reports_reset_at",
-        datetime.now().isoformat(sep=" ", timespec="seconds"),
-    )
-    flash("Reports reset — totals now start from zero. Nothing was deleted.", "success")
-    return redirect(url_for("reports.index"))
-
-
 @bp.route("/ledger/<entry_type>/<int:entry_id>/delete", methods=["POST"])
 def delete_ledger_entry(entry_type, entry_id):
-    """حذف on a Reports-page ledger row. Routes to whichever service
-    already owns that kind of record - reuses delete_purchase/
-    delete_expense (pre-existing) and the new delete_sale_line/
-    delete_writeoff/delete_adjustment, so there's exactly one delete
-    implementation per record type shared with every other page that
-    can delete the same kind of thing (e.g. a sale line deleted from
-    here is identical to deleting it from Sale Detail)."""
     deleter = _LEDGER_DELETERS.get(entry_type)
     if deleter is None:
         abort(404)
@@ -161,16 +116,80 @@ def delete_ledger_entry(entry_type, entry_id):
 
 @bp.route("/today")
 def today():
+    """معاملات اليوم - today only. Also takes an optional ?q= search
+    (text match on each entry's description), same convention as every
+    other search box in this app (orders.html, sales_history.html)."""
     today_key = datetime.now().date().isoformat()
     report = report_service.today_report()
+    query = request.args.get("q", "").strip() or None
     transactions = report_service.financial_ledger(
         f"{today_key} 00:00:00", f"{today_key}T23:59:59"
     )["entries"]
+    if query:
+        needle = query.lower()
+        transactions = [t for t in transactions if needle in (t.get("description") or "").lower()]
     return render_template(
         "today_report.html",
         report=report,
         transactions=transactions,
         today_key=today_key,
+        search=query,
+    )
+
+
+@bp.route("/method/drawer")
+def drawer():
+    """كل معاملات الدرج - every cash-bucket interaction since this
+    feature started tracking (no date-scoping/reset concept - reports
+    reset was removed). Same composition as the الدرج figure itself:
+    cash payments in, cash purchases/expenses out, drawer adjustments -
+    see report_service.method_ledger()."""
+    query = request.args.get("q", "").strip() or None
+    date_from = request.args.get("from") or None
+    date_to = request.args.get("to") or None
+    entries = report_service.method_ledger("cash", query=query, date_from=date_from, date_to=date_to)
+    return render_template(
+        "method_report.html",
+        title="الدرج",
+        entries=entries,
+        search=query,
+        date_from=date_from,
+        date_to=date_to,
+        page_endpoint="reports.drawer",
+    )
+
+
+@bp.route("/method/vodafone-cash")
+def vodafone_cash():
+    query = request.args.get("q", "").strip() or None
+    date_from = request.args.get("from") or None
+    date_to = request.args.get("to") or None
+    entries = report_service.method_ledger("vodafone_cash", query=query, date_from=date_from, date_to=date_to)
+    return render_template(
+        "method_report.html",
+        title="Vodafone Cash",
+        entries=entries,
+        search=query,
+        date_from=date_from,
+        date_to=date_to,
+        page_endpoint="reports.vodafone_cash",
+    )
+
+
+@bp.route("/method/instapay")
+def instapay():
+    query = request.args.get("q", "").strip() or None
+    date_from = request.args.get("from") or None
+    date_to = request.args.get("to") or None
+    entries = report_service.method_ledger("instapay", query=query, date_from=date_from, date_to=date_to)
+    return render_template(
+        "method_report.html",
+        title="InstaPay",
+        entries=entries,
+        search=query,
+        date_from=date_from,
+        date_to=date_to,
+        page_endpoint="reports.instapay",
     )
 
 
@@ -201,22 +220,9 @@ def export_pdf():
 
 @bp.route("/api/analytics")
 def analytics_api():
-    """Chart.js-ready JSON for the admin-only analytics section embedded in
-    the Reports page. ?timeframe=weekly|monthly|6months|yearly
-    Moved in from the old standalone /owner page — same owner_dashboard
-    service call, same admin gate, nothing recalculated differently.
-
-    BUG FIX: now passes reports_reset_at through to
-    owner_service.build_dashboard_payload(), which clips the rolling
-    window's start date at the reset point when one is set. Previously
-    this section ignored إعادة ضبط التقارير completely - it's why KPIs
-    and charts kept showing real historical numbers no matter how many
-    times Reset was pressed.
-    """
     if session.get("role") != "admin":
         return jsonify({"error": "forbidden"}), 403
 
     timeframe = request.args.get("timeframe") or owner_service.DEFAULT_TIMEFRAME
-    reset_at = settings_service.get("reports_reset_at")
-    payload = owner_service.build_dashboard_payload(timeframe, reset_at=reset_at)
+    payload = owner_service.build_dashboard_payload(timeframe)
     return jsonify(payload)
