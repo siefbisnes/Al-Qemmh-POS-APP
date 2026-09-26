@@ -16,8 +16,14 @@ TARGETS = [
     ("vodafone_cash", "Vodafone Cash"),
     ("total", "الاجمالي"),
     ("expenses", "المصروفات"),
-    ("purchases", "المشتريات"),
-    ("net_profit", "صافي الربح"),
+    # "purchases"/"net_profit" removed from here on purpose - a flat
+    # +/- amount only cancels out correctly for the exact date window
+    # you were viewing when you added it (weekly vs monthly vs 6-months
+    # each have a different real total, so the SAME flat deduction gave
+    # a wrong, non-zero number on every window except one). Both now use
+    # a real reset-point mechanism instead - see
+    # app/services/owner_dashboard.py:_reset_at()/_after_reset() and the
+    # "إعادة ضبط" buttons on the analytics صافي الربح/المشتريات cards.
 ]
 _VALID_TARGETS = {key for key, _ in TARGETS}
 

@@ -114,11 +114,19 @@
         <div class="label">صافي الربح</div>
         <div class="value sensitive" id="raKpiProfit">—</div>
         <div class="ra-kpi-secondary" id="raKpiProfitSecondary"></div>
+        <form method="post" action="{{ url_for('reports.reset_analytics_kpi', kpi='net_profit') }}"
+              onsubmit="return confirm('إعادة ضبط صافي الربح؟ لن يتم احتساب أي نشاط قبل الآن ضمن هذا المؤشر بعد الآن.');">
+          <button type="submit" class="btn btn-sm" style="margin-top:.6rem;">إعادة ضبط</button>
+        </form>
       </article>
       <article class="ra-kpi">
         <div class="label">المشتريات</div>
         <div class="value sensitive" id="raKpiPurchases">—</div>
         <div class="hint">إجمالي جدول المشتريات خلال الفترة</div>
+        <form method="post" action="{{ url_for('reports.reset_analytics_kpi', kpi='purchases') }}"
+              onsubmit="return confirm('إعادة ضبط المشتريات؟ لن يتم احتساب أي نشاط قبل الآن ضمن هذا المؤشر بعد الآن.');">
+          <button type="submit" class="btn btn-sm" style="margin-top:.6rem;">إعادة ضبط</button>
+        </form>
       </article>
       <article class="ra-kpi">
         <div class="label">سيولة معرضة للخطر</div>

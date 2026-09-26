@@ -33,6 +33,51 @@ DEFAULT_TIMEFRAME = "6months"
 STAGNANT_DAYS = 60
 
 
+def _reset_at(kpi):
+    """Returns the stored reset point for 'net_profit' or 'purchases'
+    (settings key kpi_reset_<kpi>_at), or None if never reset.
+
+    This replaces the old flat +/- manual-adjustment approach for these
+    two KPIs specifically: a fixed amount only cancelled out correctly
+    for the exact date window you were viewing when you added it -
+    weekly/monthly/6-months/yearly each have a different real total, so
+    subtracting the SAME flat amount from all of them left every window
+    except one showing a wrong, non-zero (often ~-amount) figure. An
+    absolute reset point instead compares cleanly against any window or
+    bucket, so "reset" means the same thing no matter which day/
+    timeframe you're looking at.
+    """
+    from app.services import settings as settings_service
+    return settings_service.get(f"kpi_reset_{kpi}_at")
+
+
+def set_reset_at(kpi):
+    """Sets kpi ('net_profit' | 'purchases') reset point to now."""
+    from app.services import settings as settings_service
+    settings_service.set(f"kpi_reset_{kpi}_at", datetime.now().isoformat(sep=" ", timespec="seconds"))
+
+
+def _effective_from(date_from, kpi):
+    """The later of the window's own start and the KPI's reset point (if
+    any) - i.e. "don't count anything before the reset, even if the
+    selected window would otherwise reach further back"."""
+    reset_at = _reset_at(kpi)
+    if reset_at and reset_at > date_from:
+        return reset_at
+    return date_from
+
+
+def _after_reset(bucket_key, kpi):
+    """Whether a chart bucket (a 'YYYY-MM-DD' or 'YYYY-MM' key) falls
+    on/after the KPI's reset point - used to zero out chart bars/points
+    for periods before the reset without shrinking the chart's own
+    bucket range (see profit_revenue_series/purchases_vs_expected)."""
+    reset_at = _reset_at(kpi)
+    if not reset_at:
+        return True
+    return bucket_key >= reset_at[: len(bucket_key)]
+
+
 def _parse_timeframe(timeframe: str) -> dict:
     key = (timeframe or DEFAULT_TIMEFRAME).strip().lower().replace(" ", "").replace("-", "")
     aliases = {"week": "weekly", "month": "monthly", "6m": "6months", "sixmonths": "6months", "year": "yearly"}
@@ -135,22 +180,6 @@ def _sum_table_by_bucket(table, date_col, amount_col, date_from, date_to, bucket
     return data
 
 
-def _sum_adjustments_by_bucket(target, date_from, date_to, bucket):
-    """Group manual admin adjustments into the same buckets as charts."""
-    data = {}
-    with db_cursor() as cur:
-        rows = cur.execute(
-            """SELECT adjustment_date AS d, amount
-               FROM manual_adjustments
-               WHERE target = ? AND adjustment_date >= ? AND adjustment_date <= ?""",
-            (target, date_from, date_to),
-        ).fetchall()
-    for row in rows:
-        key = _bucket_key(row["d"], bucket)
-        data[key] = data.get(key, 0.0) + float(row["amount"] or 0)
-    return data
-
-
 def profit_revenue_series(date_from, date_to, bucket):
     """Revenue vs Net Profit over time.
 
@@ -161,23 +190,36 @@ def profit_revenue_series(date_from, date_to, bucket):
     every write-off whose 12-month amortization window covers t (custom
     client-requested spread; see
     docs/spoilage_management_requirements.md).
+
+    Manual "صافي الربح" adjustments (the reset-to-zero mechanism on the
+    A صافي الربح reset (see _reset_at()/set_reset_at() above) zeroes the
+    Net Profit line for every bucket before the reset point, while the
+    Revenue line stays a real, unmodified read of actual sales history -
+    only profit resets, not revenue itself. An earlier version folded a
+    flat manual-adjustment amount into whichever single bucket it was
+    added on, which just moved the discrepancy around instead of fixing
+    it (a fixed amount doesn't scale to match each different bucket/
+    window's real total) - this compares an absolute date instead, so it
+    behaves the same regardless of which bucket or timeframe is viewed.
     """
     from app.services import writeoffs as writeoff_service
 
     sales = _sum_sales_by_bucket(date_from, date_to, bucket)
     expenses = _sum_table_by_bucket("expenses", "expense_date", "amount", date_from, date_to, bucket)
     writeoff_costs = writeoff_service.amortization_by_bucket(date_from, date_to, bucket)
-    manual_profit = _sum_adjustments_by_bucket("net_profit", date_from, date_to, bucket)
     buckets = _empty_buckets(date_from, date_to, bucket)
 
     labels, revenue, net_profit = [], [], []
     for key in buckets:
         cell = sales.get(key, {})
         rev = cell.get("revenue", 0.0)
-        cogs = cell.get("cogs", 0.0)
-        exp = expenses.get(key, 0.0)
-        wo = writeoff_costs.get(key, 0.0)
-        profit = rev - cogs - exp - wo + manual_profit.get(key, 0.0)
+        if _after_reset(key, "net_profit"):
+            cogs = cell.get("cogs", 0.0)
+            exp = expenses.get(key, 0.0)
+            wo = writeoff_costs.get(key, 0.0)
+            profit = rev - cogs - exp - wo
+        else:
+            profit = 0.0
         labels.append(_label_for_bucket(key, bucket))
         revenue.append(round(rev, 2))
         net_profit.append(round(profit, 2))
@@ -243,10 +285,14 @@ def purchases_vs_expected(date_from, date_to, bucket):
         label changed; was "المشتريات المسجلة من المخزون"): cash
         recorded in the purchases table per bucket, for the selected
         period.
+
+    A المشتريات reset (see _reset_at()/set_reset_at() above) zeroes the
+    المباع bar for every bucket before the reset point - same reasoning
+    as profit_revenue_series() above. Expected Returns (a live inventory
+    snapshot, unrelated to purchases) is untouched by this.
     """
     buckets = _empty_buckets(date_from, date_to, bucket)
     recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", date_from, date_to, bucket)
-    manual_purchases = _sum_adjustments_by_bucket("purchases", date_from, date_to, bucket)
 
     bucket_keys = list(buckets.keys())
     expected_by_bucket = _expected_returns_by_bucket(date_from, date_to, bucket, bucket_keys)
@@ -265,7 +311,10 @@ def purchases_vs_expected(date_from, date_to, bucket):
             },
             {
                 "label": "المباع",
-                "data": [round(recorded.get(k, 0.0) + manual_purchases.get(k, 0.0), 2) for k in bucket_keys],
+                "data": [
+                    round(recorded.get(k, 0.0), 2) if _after_reset(k, "purchases") else 0.0
+                    for k in bucket_keys
+                ],
                 "backgroundColor": "rgba(96, 165, 250, 0.65)",
                 "borderRadius": 6,
             },
@@ -401,13 +450,19 @@ def kpis(date_from, date_to):
     Potential Net Profit = Total Revenue - Total COGS - Expenses - Writeoff cost
     """
     from app.services import writeoffs as writeoff_service
-    from app.services import adjustments as adjustment_service
 
     # Total sales data
     sales = _sum_sales_by_bucket(date_from, date_to, "day")
     total_revenue = sum(v["revenue"] for v in sales.values())
     total_cogs = sum(v["cogs"] for v in sales.values())
     units = sum(v["units"] for v in sales.values())
+
+    # صافي الربح reset point: nothing before it counts toward profit,
+    # regardless of how far back the selected window would otherwise
+    # reach. Revenue/units above stay unclipped (real sales history is
+    # still real sales history) - only the profit-side sums below are
+    # affected.
+    profit_from = _effective_from(date_from, "net_profit")
 
     # Calculate realized revenue and COGS based on actual payments
     realized_revenue = 0.0
@@ -428,7 +483,7 @@ def kpis(date_from, date_to):
     """
 
     with db_cursor() as cur:
-        for row in cur.execute(realized_query, (date_from, date_to)).fetchall():
+        for row in cur.execute(realized_query, (profit_from, date_to)).fetchall():
             total_sale = float(row["total_sale_amount"] or 0)
             paid = float(row["paid_amount"] or 0)
             total_cogs_for_tx = float(row["total_cogs"] or 0)
@@ -440,13 +495,18 @@ def kpis(date_from, date_to):
                 realized_cogs += total_cogs_for_tx * paid_ratio
 
     with db_cursor() as cur:
+        profit_expenses = cur.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS t FROM expenses WHERE expense_date >= ? AND expense_date <= ?",
+            (profit_from, date_to),
+        ).fetchone()["t"]
         expenses = cur.execute(
             "SELECT COALESCE(SUM(amount), 0) AS t FROM expenses WHERE expense_date >= ? AND expense_date <= ?",
             (date_from, date_to),
         ).fetchone()["t"]
+        purchases_from = _effective_from(date_from, "purchases")
         purchases = cur.execute(
             "SELECT COALESCE(SUM(cost), 0) AS t FROM purchases WHERE purchase_date >= ? AND purchase_date <= ?",
-            (date_from, date_to),
+            (purchases_from, date_to),
         ).fetchone()["t"]
         inventory = cur.execute(
             """
@@ -456,9 +516,9 @@ def kpis(date_from, date_to):
             """
         ).fetchone()
 
+    profit_expenses = float(profit_expenses or 0)
     expenses = float(expenses or 0)
     purchases = float(purchases or 0)
-    purchases += float(adjustment_service.adjustment_total("purchases", date_from, date_to) or 0)
     # Net Profit uses the amortized (12-month spread) spoilage installment
     # due in [date_from, date_to], NOT the full write-off cost - custom
     # client-requested override, see
@@ -466,19 +526,16 @@ def kpis(date_from, date_to):
     # cost still drives the "at-risk liquidity" KPI below (stock_and_damaged/
     # stagnant_and_damaged), which answers a different question (how much
     # capital is tied up in damaged stock right now).
-    writeoff_cost = writeoff_service.amortized_total(date_from=date_from, date_to=date_to)
+    writeoff_cost = writeoff_service.amortized_total(date_from=profit_from, date_to=date_to)
     # Only revenue_loss (never amortized - it's informational, not a P&L
     # deduction) is still read from the full, un-amortized totals().
     wo = writeoff_service.totals(date_from=date_from, date_to=date_to)
 
     # Realized net profit: from money that has actually been collected
-    realized_net_profit = realized_revenue - realized_cogs - expenses - writeoff_cost
+    realized_net_profit = realized_revenue - realized_cogs - profit_expenses - writeoff_cost
 
     # Potential net profit: from all sales including unpaid debt
-    potential_net_profit = total_revenue - total_cogs - expenses - writeoff_cost
-    net_profit_adjustment = float(adjustment_service.adjustment_total("net_profit", date_from, date_to) or 0)
-    realized_net_profit += net_profit_adjustment
-    potential_net_profit += net_profit_adjustment
+    potential_net_profit = total_revenue - total_cogs - profit_expenses - writeoff_cost
 
     # Outstanding debt
     outstanding_debt = total_revenue - realized_revenue

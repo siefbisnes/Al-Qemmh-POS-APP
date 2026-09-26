@@ -226,3 +226,18 @@ def analytics_api():
     timeframe = request.args.get("timeframe") or owner_service.DEFAULT_TIMEFRAME
     payload = owner_service.build_dashboard_payload(timeframe)
     return jsonify(payload)
+
+
+@bp.route("/analytics/reset/<kpi>", methods=["POST"])
+def reset_analytics_kpi(kpi):
+    """إعادة ضبط for the صافي الربح/المشتريات analytics cards specifically
+    (not the whole Reports page - إعادة ضبط التقارير was removed
+    entirely). See owner_dashboard.py:set_reset_at()/_reset_at() for how
+    this is actually applied - a stored date, not a one-off amount."""
+    if session.get("role") != "admin":
+        abort(403)
+    if kpi not in {"net_profit", "purchases"}:
+        abort(404)
+    owner_service.set_reset_at(kpi)
+    flash("تمت إعادة الضبط بنجاح.", "success")
+    return redirect(url_for("reports.index"))
