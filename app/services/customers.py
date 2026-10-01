@@ -456,11 +456,32 @@ def add_payment(transaction_id, amount, method="cash"):
     if amount <= 0:
         raise ValueError("Payment amount must be greater than zero.")
 
-    purchase = get_purchase(transaction_id)
-    if not purchase:
-        raise ValueError("Purchase not found.")
-
     with db_cursor(commit=True) as cur:
+        purchase = cur.execute(
+            """SELECT t.id,
+                      COALESCE((
+                          SELECT SUM(s.quantity * s.selling_price)
+                          FROM sales s
+                          WHERE s.transaction_id = t.id AND s.is_voided = 0
+                      ), 0) AS total,
+                      COALESCE((
+                          SELECT SUM(sp.amount)
+                          FROM sale_payments sp
+                          WHERE sp.transaction_id = t.id
+                      ), 0) AS paid
+               FROM transactions t
+               WHERE t.id = ?""",
+            (transaction_id,),
+        ).fetchone()
+        if not purchase:
+            raise ValueError("Purchase not found.")
+
+        remaining = max(_money(purchase["total"]) - _money(purchase["paid"]), 0)
+        if amount > remaining + 0.009:
+            raise ValueError(
+                f"المبلغ المسدد يتجاوز الدين المتبقي ({remaining:.2f} ج.م)."
+            )
+
         cur.execute(
             "INSERT INTO sale_payments (transaction_id, method, amount, created_at) VALUES (?, ?, ?, ?)",
             (transaction_id, method, amount, datetime.now().isoformat(timespec="seconds")),
