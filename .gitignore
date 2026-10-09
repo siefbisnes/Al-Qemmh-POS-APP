@@ -25,3 +25,6 @@ instance/
 /vendor/MicrosoftEdgeWebView2RuntimeInstallerX64.exe
 /vendor/tailscale-setup-latest-amd64.exe
 
+
+# Packaged application output
+/Program/
