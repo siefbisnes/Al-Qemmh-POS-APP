@@ -9,3 +9,19 @@ instance/
 =======
 .Mygit/
 >>>>>>> 9ad7f88 (Initial commit)
+
+# Windows installers and redistributables
+*.exe
+*.msi
+
+# Build outputs
+/build/
+/dist/
+
+# Installer output
+/installer/
+
+# Bundled setup files
+/vendor/MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+/vendor/tailscale-setup-latest-amd64.exe
+

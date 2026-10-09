@@ -131,6 +131,8 @@ def customer_debt_summary():
     See CLAMP_OVERPAYMENT_TO_ZERO above for how a per-transaction
     overpayment (from a partial void after full payment) is handled.
     """
+    from app.services import orders as order_service
+
     query = """
         SELECT
             t.id AS transaction_id,
@@ -146,12 +148,13 @@ def customer_debt_summary():
         FROM transactions t
         JOIN sales s ON s.transaction_id = t.id
         WHERE s.is_voided = 0
+                    AND {order_exclusion}
           AND (
                 TRIM(COALESCE(s.customer_name, '')) <> ''
              OR TRIM(COALESCE(s.customer_phone, '')) <> ''
           )
         GROUP BY t.id
-    """
+    """.format(order_exclusion=order_service.pending_order_sql_exclusion("s"))
 
     with db_cursor() as cur:
         rows = [dict(r) for r in cur.execute(query).fetchall()]

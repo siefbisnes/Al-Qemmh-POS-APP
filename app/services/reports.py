@@ -2,10 +2,23 @@ from app.db import db_cursor
 from app.services import customer_reports as customer_report_service
 
 
+def _sale_date_filter(date_from=None, date_to=None):
+    """Normalize report date bounds for T-separated sale_date / payment
+    timestamps. Bare 'YYYY-MM-DD' from the Reports date inputs must be
+    padded (and space-separated reset timestamps rewritten) or same-day
+    backdated sales are excluded by string comparison — see
+    customer_reports._normalize_datetime_filter."""
+    return (
+        customer_report_service._normalize_datetime_filter(date_from),
+        customer_report_service._normalize_datetime_filter(date_to, end_of_day=True),
+    )
+
+
 def summary(date_from=None, date_to=None):
     """Total revenue, cost, profit for sales in the given window (or all-time).
     Voided sales never count - that's the whole point of voiding instead of
     just deleting the row."""
+    date_from, date_to = _sale_date_filter(date_from, date_to)
     query = """SELECT s.quantity, s.selling_price, p.purchase_price FROM sales s
                JOIN products p ON p.id = s.product_id WHERE s.is_voided = 0"""
     params = []
@@ -50,12 +63,13 @@ def today_report(date_from=None, all_time_if_none=False):
     from app.services import writeoffs as writeoff_service
 
     if date_from:
+        sale_from, _ = _sale_date_filter(date_from)
         sale_query = """SELECT s.*, COALESCE(NULLIF(TRIM(s.custom_product_name), ''), s.service_description, p.name) AS product_name,
                       p.purchase_price, p.quantity AS remaining_quantity
                FROM sales s JOIN products p ON p.id = s.product_id
                WHERE s.is_voided = 0 AND s.sale_date >= ?
                ORDER BY s.sale_date"""
-        sale_params = (date_from,)
+        sale_params = (sale_from,)
         payments_from = date_from
         expenses_from = date_from
         purchases_from = date_from
@@ -81,19 +95,20 @@ def today_report(date_from=None, all_time_if_none=False):
         report_date = None
     else:
         today_str = _date.today().isoformat()
+        sale_from, sale_to = _sale_date_filter(today_str, today_str)
         sale_query = """SELECT s.*, COALESCE(NULLIF(TRIM(s.custom_product_name), ''), s.service_description, p.name) AS product_name,
                       p.purchase_price, p.quantity AS remaining_quantity
                FROM sales s JOIN products p ON p.id = s.product_id
                WHERE s.is_voided = 0 AND s.sale_date >= ? AND s.sale_date <= ?
                ORDER BY s.sale_date"""
-        sale_params = (f"{today_str} 00:00:00", f"{today_str}T23:59:59")
+        sale_params = (sale_from, sale_to)
         payments_from = today_str
         expenses_from = today_str
         purchases_from = today_str
         drawer_adj_from = today_str
         today_adj_from = today_str
         writeoff_date_from = today_str
-        writeoff_date_to = f"{today_str}T23:59:59"
+        writeoff_date_to = sale_to
         report_date = today_str
 
     with db_cursor() as cur:
@@ -198,16 +213,20 @@ def date_range_summary(date_from=None, date_to=None):
     from app.services import adjustments as adjustment_service
     from app.services import writeoffs as writeoff_service
 
+    # sale_date / financially_completed_at are T-separated; expenses and
+    # purchases stay on the caller's bare dates (those columns use spaces).
+    sale_from, sale_to = _sale_date_filter(date_from, date_to)
+
     # Total revenue and COGS (all sales, including unpaid)
     query = """SELECT s.quantity, s.selling_price, p.purchase_price FROM sales s
                JOIN products p ON p.id = s.product_id WHERE s.is_voided = 0"""
     params = []
-    if date_from:
+    if sale_from:
         query += " AND s.sale_date >= ?"
-        params.append(date_from)
-    if date_to:
+        params.append(sale_from)
+    if sale_to:
         query += " AND s.sale_date <= ?"
-        params.append(date_to)
+        params.append(sale_to)
     with db_cursor() as cur:
         rows = cur.execute(query, params).fetchall()
     total_revenue = sum(r["selling_price"] * r["quantity"] for r in rows)
@@ -219,21 +238,24 @@ def date_range_summary(date_from=None, date_to=None):
         SELECT
             t.id AS transaction_id,
             SUM(s.quantity * s.selling_price) AS total_sale_amount,
-            COALESCE(SUM(sp.amount), 0) AS paid_amount,
+            COALESCE((
+                SELECT SUM(sp.amount)
+                FROM sale_payments sp
+                WHERE sp.transaction_id = t.id
+            ), 0) AS paid_amount,
             SUM(s.quantity * p.purchase_price) AS total_cogs
         FROM transactions t
         JOIN sales s ON s.transaction_id = t.id
         JOIN products p ON p.id = s.product_id
-        LEFT JOIN sale_payments sp ON sp.transaction_id = t.id
         WHERE s.is_voided = 0
     """
     realized_params = []
-    if date_from:
+    if sale_from:
         realized_query += " AND s.sale_date >= ?"
-        realized_params.append(date_from)
-    if date_to:
+        realized_params.append(sale_from)
+    if sale_to:
         realized_query += " AND s.sale_date <= ?"
-        realized_params.append(date_to)
+        realized_params.append(sale_to)
     realized_query += " GROUP BY t.id"
 
     realized_revenue = 0.0
@@ -337,6 +359,7 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
     #      date. An ordinary walk-in sale has no order row at all, so
     #      COALESCE just falls through to its own sale_date, unaffected.
     date_expr = "COALESCE(o.financially_completed_at, s.sale_date)"
+    sale_from, sale_to = _sale_date_filter(date_from, date_to)
     sales_query = f"""SELECT s.id AS id, {date_expr} AS date, s.transaction_id, s.quantity,
                              s.selling_price, t.receipt_number AS stored_receipt_number,
                              COALESCE(NULLIF(TRIM(s.custom_product_name), ''), s.service_description, p.name) AS product_name
@@ -346,12 +369,12 @@ def financial_ledger(date_from=None, date_to=None, group_by="day"):
                       WHERE s.is_voided = 0
                         AND {order_service.pending_order_sql_exclusion("s")}"""
     sales_params = []
-    if date_from:
+    if sale_from:
         sales_query += f" AND {date_expr} >= ?"
-        sales_params.append(date_from)
-    if date_to:
+        sales_params.append(sale_from)
+    if sale_to:
         sales_query += f" AND {date_expr} <= ?"
-        sales_params.append(date_to)
+        sales_params.append(sale_to)
     with db_cursor() as cur:
         for r in cur.execute(sales_query, sales_params).fetchall():
             # Same canonical receipt number shown on Sales History, the

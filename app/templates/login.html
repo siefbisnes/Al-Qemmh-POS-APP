@@ -6,7 +6,7 @@ block content %}
             <div class="brand-name">Al Qemma</div>
             <p class="login-welcome">مرحباً بك في موقع إدارة متجر القمة</p>
         </div>
-        <form method="post" class="login-form" autocomplete="off">
+        <form method="post" action="{{ url_for('auth.login') }}" class="login-form" autocomplete="off">
             <div class="field">
                 <label for="username">اسم المستخدم</label>
                 <input

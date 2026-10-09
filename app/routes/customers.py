@@ -116,3 +116,16 @@ def complete_purchase(transaction_id):
     except ValueError as exc:
         flash(str(exc), "error")
     return redirect(url_for("customers.purchase_detail", transaction_id=transaction_id))
+
+
+@bp.route("/purchase/<int:transaction_id>/payment/<int:payment_id>/revert", methods=["POST"])
+def revert_payment(transaction_id, payment_id):
+    try:
+        payment = customer_service.reverse_payment(transaction_id, payment_id)
+        flash(
+            f"تم التراجع عن تسجيل الدفعة بقيمة {payment['amount']:.2f} ج.م، وأُعيد المبلغ إلى المتبقي.",
+            "success",
+        )
+    except ValueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("customers.purchase_detail", transaction_id=transaction_id))

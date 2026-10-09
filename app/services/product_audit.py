@@ -42,18 +42,23 @@ EVENT_LABELS_AR = {
     "order_deleted": "حذف اوردر",
     "expense_deleted": "حذف مصروف",
     "purchase_deleted": "حذف مشتريات",
+    "customer_payment": "سداد مديونية عميل",
+    "customer_payment_reversed": "التراجع عن سداد مديونية",
 }
 
 # Event types that aren't really "about" a product row (product_id is
 # always None for these) - the audit log page uses this to avoid
 # labelling them "(محذوف)" the way it does for a genuinely deleted
 # product, since that would be misleading here.
-NON_PRODUCT_EVENT_TYPES = {"order_deleted", "expense_deleted", "purchase_deleted"}
+NON_PRODUCT_EVENT_TYPES = {
+    "order_deleted", "expense_deleted", "purchase_deleted",
+    "customer_payment", "customer_payment_reversed",
+}
 
 USER_VISIBLE_EVENT_TYPES = {
     "created", "removed", "quantity_sale", "quantity_manual", "quantity_damaged",
     "price_selling", "name_changed", "identifier_changed", "grade_changed", "category_changed",
-    "specs_changed", "sale_return",
+    "specs_changed", "sale_return", "customer_payment", "customer_payment_reversed",
 }
 
 

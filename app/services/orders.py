@@ -28,8 +28,8 @@ STATUS_LABELS_AR = {
     "preparing": "تجهيز الاوردر",
     "shipping": "في الشحن",
     "delivered": "وصل",
-    "not_delivered": "لم يصل",
-    "cancelled": "الغاء الاوردر",
+    "not_delivered": "تعذر التسليم",
+    "cancelled": "إلغاء قبل التسليم",
 }
 
 

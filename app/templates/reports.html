@@ -115,7 +115,7 @@
         <div class="value sensitive" id="raKpiProfit">—</div>
         <div class="ra-kpi-secondary" id="raKpiProfitSecondary"></div>
         <form method="post" action="{{ url_for('reports.reset_analytics_kpi', kpi='net_profit') }}"
-              onsubmit="return confirm('إعادة ضبط صافي الربح؟ لن يتم احتساب أي نشاط قبل الآن ضمن هذا المؤشر بعد الآن.');">
+            onsubmit="return confirm('تصفير صافي الربح والرسم المرتبط به؟ ستبدأ الأرقام من الصفر من الآن، دون حذف أي سجلات.');">
           <button type="submit" class="btn btn-sm" style="margin-top:.6rem;">إعادة ضبط</button>
         </form>
       </article>
@@ -124,7 +124,7 @@
         <div class="value sensitive" id="raKpiPurchases">—</div>
         <div class="hint">إجمالي جدول المشتريات خلال الفترة</div>
         <form method="post" action="{{ url_for('reports.reset_analytics_kpi', kpi='purchases') }}"
-              onsubmit="return confirm('إعادة ضبط المشتريات؟ لن يتم احتساب أي نشاط قبل الآن ضمن هذا المؤشر بعد الآن.');">
+            onsubmit="return confirm('تصفير المشتريات والرسم المرتبط بها؟ ستبدأ الأرقام من الصفر من الآن، دون حذف أي سجلات.');">
           <button type="submit" class="btn btn-sm" style="margin-top:.6rem;">إعادة ضبط</button>
         </form>
       </article>
@@ -135,6 +135,10 @@
           راكد: <span class="sensitive" id="raKpiStagnantHint">—</span>
           · هالك: <span class="sensitive" id="raKpiDamagedHint">—</span>
         </div>
+        <form method="post" action="{{ url_for('reports.reset_analytics_kpi', kpi='at_risk') }}"
+              onsubmit="return confirm('تصفير السيولة المعرضة للخطر والرسم المرتبط بها؟ سيتم اعتماد الوضع الحالي للمخزون كخط بداية، وستُحسب الزيادة والهالك الجديد بعد الآن. لن يتغير المخزون أو تُحذف أي سجلات.');">
+          <button type="submit" class="btn btn-sm" style="margin-top:.6rem;">إعادة ضبط</button>
+        </form>
       </article>
     </div>
 

@@ -6,18 +6,14 @@
   <h1>اوردر #{{ order.receipt_number }}</h1>
   <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
     <a href="{{ url_for('sales.transaction_detail', transaction_id=order.transaction_id) }}" class="btn btn-sm">عرض الفاتورة الأصلية</a>
-    <form method="post" action="{{ url_for('orders.delete', order_id=order.id) }}"
-          onsubmit="return confirm('حذف هذا الاوردر بالكامل كأنه لم يحدث؟ سيتم إرجاع الكميات للمخزون ولا يمكن التراجع.');">
-      <button type="submit" class="btn btn-sm btn-danger">حذف</button>
-    </form>
-    <button type="button" class="btn btn-sm btn-danger" id="openReturnModalBtn">ارجاع</button>
+    <button type="button" class="btn btn-sm btn-danger" id="openReturnModalBtn">إرجاع الطلب</button>
   </div>
 </div>
 
 <div class="modal-overlay" id="returnOrderModal" hidden>
   <div class="modal-box" style="max-width:480px; text-align:right;">
-    <h2 style="margin-top:0;">تأكيد إرجاع الاوردر</h2>
-    <p>سيؤدي هذا إلى:</p>
+    <h2 style="margin-top:0;">إرجاع الطلب وحذف الفاتورة</h2>
+    <p>سيتم حذف سجل البيع بالكامل؛ لا يمكن التراجع عن هذه الخطوة:</p>
     <ul style="padding-inline-start:1.2rem; line-height:1.9;">
       <li>حذف الإيصال وكل المنتجات المرتبطة به نهائيًا</li>
       <li>إرجاع كل الكميات إلى المخزون</li>
@@ -30,23 +26,23 @@
       <div class="payment-method-buttons" style="display:flex; flex-direction:column; gap:.5rem;">
         <label class="payment-method-btn selected">
           <input type="radio" name="shipping_cost_bearer" value="shop" checked>
-          تحمل تكلفة الشحن (سيتم الخصم من الاونلاين)
+          المحل يتحمل تكلفة الشحن (تبقى مسجلة كمصروف)
         </label>
         <label class="payment-method-btn">
           <input type="radio" name="shipping_cost_bearer" value="customer">
-          تحمل العميل تكلفة الشحن
+          العميل يتحمل تكلفة الشحن (تحذف قيود الشحن من الحسابات)
         </label>
       </div>
       <div class="modal-actions" style="margin-top:1.25rem;">
-        <button type="button" class="btn" id="cancelReturnModalBtn">تراجع</button>
-        <button type="submit" class="btn btn-danger">تأكيد الإرجاع</button>
+        <button type="button" class="btn" id="cancelReturnModalBtn">إغلاق دون تنفيذ</button>
+        <button type="submit" class="btn btn-danger">تأكيد الإرجاع والحذف</button>
       </div>
     </form>
     {% else %}
     <form method="post" action="{{ url_for('orders.return_order', order_id=order.id) }}" id="returnOrderForm">
       <div class="modal-actions" style="margin-top:1.25rem;">
-        <button type="button" class="btn" id="cancelReturnModalBtn">تراجع</button>
-        <button type="submit" class="btn btn-danger">تأكيد الإرجاع</button>
+        <button type="button" class="btn" id="cancelReturnModalBtn">إغلاق دون تنفيذ</button>
+        <button type="submit" class="btn btn-danger">تأكيد الإرجاع والحذف</button>
       </div>
     </form>
     {% endif %}
@@ -123,11 +119,11 @@
              discoverable than a separate button, and the one exception
              to "only the next stage forward is clickable". -->
         <form method="post" action="{{ url_for('orders.revert_to_shipping', order_id=order.id) }}"
-              onsubmit="return confirm('التراجع عن حالة وصل والعودة إلى في التوصيل؟');"
+              onsubmit="return confirm('إعادة الطلب إلى حالة في الشحن؟ سيتغير وضع التوصيل فقط؛ لن تُحذف الفاتورة أو المدفوعات ولن تعود المنتجات للمخزون.');"
               style="flex:1 1 160px; min-width:140px;">
           <button type="submit" class="delivery-stage done clickable"
                   style="width:100%; border:2px solid var(--border); font:inherit;">
-            <span class="check-icon">✓</span>{{ label }}
+            <span class="check-icon">✓</span>رجوع إلى الشحن
           </button>
         </form>
       {% else %}
@@ -151,12 +147,12 @@
   {% if order.status not in ['not_delivered', 'cancelled', 'delivered'] %}
   <div class="delivery-terminal-actions">
     <form method="post" action="{{ url_for('orders.not_delivered', order_id=order.id) }}"
-          onsubmit="return confirm('تأكيد أن الاوردر لم يصل؟');">
-      <button type="submit" class="btn btn-sm btn-danger">لم يصل</button>
+        onsubmit="return confirm('تسجيل تعذر التسليم؟ سيبقى الطلب والفاتورة والمخزون كما هي، ولن تُحذف قيود الشحن. لن يُسجل هذا تحصيلًا أو يُرجع المنتجات للمخزون.');">
+      <button type="submit" class="btn btn-sm btn-danger">تعذر التسليم</button>
     </form>
     <form method="post" action="{{ url_for('orders.cancel', order_id=order.id) }}"
-          onsubmit="return confirm('تأكيد إلغاء الاوردر؟');">
-      <button type="submit" class="btn btn-sm btn-danger">إلغاء الاوردر</button>
+        onsubmit="return confirm('إلغاء الطلب قبل التسليم؟ سيبقى الطلب والفاتورة والمخزون كما هي، ولن تُحذف قيود الشحن. لن يُسجل هذا تحصيلًا أو يُرجع المنتجات للمخزون.');">
+      <button type="submit" class="btn btn-sm btn-danger">إلغاء قبل التسليم</button>
     </form>
   </div>
   {% endif %}

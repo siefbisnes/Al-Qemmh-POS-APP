@@ -54,7 +54,7 @@
             {{ e.product_name }}
           {% endif %}
         </strong>
-        {% if not e.product_id and e.event_type not in ('order_deleted', 'expense_deleted', 'purchase_deleted') %}<span class="subtitle">(محذوف)</span>{% endif %}
+        {% if not e.product_id and e.event_type not in ('order_deleted', 'expense_deleted', 'purchase_deleted', 'customer_payment', 'customer_payment_reversed') %}<span class="subtitle">(محذوف)</span>{% endif %}
       </div>
       <span class="subtitle">{{ e.created_at[:16] }}{% if e.username %} — بواسطة: {{ e.username }}{% endif %}</span>
     </div>
@@ -90,6 +90,11 @@
       {% elif e.note %}
         <p class="subtitle" style="margin:0.2rem 0;">{{ e.note }}</p>
       {% endif %}
+
+    {# ---- customer payment events ---- #}
+    {% elif e.event_type in ('customer_payment', 'customer_payment_reversed') %}
+      <p style="margin:0.2rem 0;">المبلغ: <strong>{{ '%.2f'|format(e.new_value|float) }} ج.م</strong></p>
+      {% if e.note %}<p class="subtitle" style="margin:0.2rem 0;">طريقة الدفع: {{ e.note }}</p>{% endif %}
 
     {# ---- deletion-only events: order/expense/purchase ---- #}
     {% elif e.event_type in ('order_deleted', 'expense_deleted', 'purchase_deleted') %}

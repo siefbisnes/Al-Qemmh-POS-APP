@@ -27,6 +27,7 @@ import sqlite3
 from datetime import datetime
 
 from app.db import db_cursor
+from app.services import product_audit
 
 
 def _clean(value):
@@ -42,6 +43,27 @@ def _money(value):
         return float(value or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _log_customer_payment_event(cur, transaction_id, amount, method, event_type):
+    customer = cur.execute(
+        """SELECT customer_name FROM sales
+           WHERE transaction_id = ? AND TRIM(COALESCE(customer_name, '')) <> ''
+           ORDER BY id LIMIT 1""",
+        (transaction_id,),
+    ).fetchone()
+    from app.services.sales import PAYMENT_LABELS_AR
+
+    product_audit.log_event(
+        None,
+        customer["customer_name"] if customer else "عميل",
+        event_type,
+        new_value=amount,
+        reference=str(transaction_id),
+        reference_type="transaction",
+        note=PAYMENT_LABELS_AR.get(method, method),
+        cur=cur,
+    )
 
 
 class AmbiguousCustomerError(Exception):
@@ -258,6 +280,8 @@ def resolve_customer(name, phone, confirmed_customer_id=None, force_new=False):
 # ============================================================
 
 def _purchase_rows_for_customer(customer_id, query=None):
+    from app.services import orders as order_service
+
     query_sql = """
         SELECT
             t.id AS transaction_id,
@@ -272,9 +296,10 @@ def _purchase_rows_for_customer(customer_id, query=None):
         JOIN sales s ON s.transaction_id = t.id
         JOIN products p ON p.id = s.product_id
         WHERE s.is_voided = 0 AND s.customer_id = ?
+          AND {order_exclusion}
         GROUP BY t.id
         ORDER BY t.created_at DESC, t.id DESC
-    """
+    """.format(order_exclusion=order_service.pending_order_sql_exclusion("s"))
     with db_cursor() as cur:
         rows = [dict(r) for r in cur.execute(query_sql, (customer_id,)).fetchall()]
     for row in rows:
@@ -486,5 +511,57 @@ def add_payment(transaction_id, amount, method="cash"):
             "INSERT INTO sale_payments (transaction_id, method, amount, created_at) VALUES (?, ?, ?, ?)",
             (transaction_id, method, amount, datetime.now().isoformat(timespec="seconds")),
         )
+        _log_customer_payment_event(cur, transaction_id, amount, method, "customer_payment")
 
     return get_purchase(transaction_id)
+
+
+def reverse_payment(transaction_id, payment_id):
+    """Remove one recorded payment and reopen an order only if no payment remains."""
+    with db_cursor(commit=True) as cur:
+        payment = cur.execute(
+            """SELECT id, transaction_id, method, amount, created_at
+               FROM sale_payments WHERE id = ? AND transaction_id = ?""",
+            (payment_id, transaction_id),
+        ).fetchone()
+        if not payment:
+            raise ValueError("الدفعة غير موجودة أو لا تخص هذه الفاتورة.")
+
+        order = cur.execute(
+            "SELECT id, payment_method, financially_completed_at FROM orders WHERE transaction_id = ?",
+            (transaction_id,),
+        ).fetchone()
+        cur.execute(
+            "DELETE FROM sale_payments WHERE id = ? AND transaction_id = ?",
+            (payment_id, transaction_id),
+        )
+
+        if order:
+            remaining_payment = cur.execute(
+                """SELECT method FROM sale_payments
+                   WHERE transaction_id = ? ORDER BY id DESC LIMIT 1""",
+                (transaction_id,),
+            ).fetchone()
+            now = datetime.utcnow().isoformat(timespec="seconds")
+            if not remaining_payment:
+                cur.execute(
+                    """UPDATE orders
+                       SET payment_method = NULL, money_transferred = 0,
+                           transfer_image_path = NULL, financially_completed_at = NULL,
+                           updated_at = ?
+                       WHERE id = ?""",
+                    (now, order["id"]),
+                )
+            elif (payment["created_at"] == order["financially_completed_at"]
+                  and payment["method"] == order["payment_method"]):
+                cur.execute(
+                    """UPDATE orders
+                       SET payment_method = ?, transfer_image_path = NULL, updated_at = ?
+                       WHERE id = ?""",
+                    (remaining_payment["method"], now, order["id"]),
+                )
+
+        _log_customer_payment_event(
+            cur, transaction_id, payment["amount"], payment["method"], "customer_payment_reversed"
+        )
+        return dict(payment)

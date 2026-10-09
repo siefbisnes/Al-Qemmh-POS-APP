@@ -323,8 +323,9 @@ CREATE INDEX idx_spoilage_amort_writeoff ON spoilage_amortization(writeoff_id);
 --
 -- financially_completed_at is the single flag every report /
 -- owner-dashboard query keys off: NULL = pending money, not yet
--- counted anywhere. Set once, on the وصل + payment-confirmation
--- step, and never cleared again.
+-- counted anywhere. Set on the وصل + payment-confirmation step, and
+-- cleared only if every recorded payment for the order is explicitly
+-- reversed; the order then returns to pending financial confirmation.
 -- ============================================================
 
 CREATE TABLE orders (
@@ -376,9 +377,8 @@ INSERT INTO delivery_providers (slug, name, is_builtin, sort_order) VALUES
 
 -- ============================================================
 -- PRODUCT AUDIT LOG
--- Every meaningful change to a product: created, removed (soft
--- delete), quantity changed (sale / manual / damaged-هالك), selling
--- price changed, purchase price changed, name changed, specs changed.
+-- Every meaningful product change and customer-payment event is logged
+-- here, including payment reversals shown in the audit history.
 -- product_id is kept nullable-in-spirit (still a real FK, but ON
 -- DELETE SET NULL - products are only ever soft-deleted in this app,
 -- never hard-deleted, but SET NULL keeps this table correct even if
@@ -395,7 +395,7 @@ CREATE TABLE product_audit_log (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     product_id    INTEGER REFERENCES products(id) ON DELETE SET NULL,
     product_name  TEXT NOT NULL,
-    event_type    TEXT NOT NULL,   -- created | removed | quantity_sale | quantity_manual | quantity_damaged | price_selling | price_purchase | name_changed | specs_changed
+    event_type    TEXT NOT NULL,   -- product events plus customer_payment | customer_payment_reversed
     field         TEXT,            -- which field changed, for the generic-edit events (e.g. 'selling_price')
     old_value     TEXT,
     new_value     TEXT,

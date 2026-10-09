@@ -58,12 +58,19 @@
       <th>الطريقة</th>
       <th>المبلغ</th>
       <th>التاريخ</th>
+      <th>الإجراء</th>
     </tr>
     {% for payment in purchase.payments %}
     <tr>
       <td>{{ payment.method }}</td>
       <td>{{ payment.amount|money }}</td>
       <td>{{ payment.created_at[:16] if payment.created_at else '—' }}</td>
+      <td>
+        <form method="post" action="{{ url_for('customers.revert_payment', transaction_id=purchase.transaction_id, payment_id=payment.id) }}"
+              onsubmit="return confirm('التراجع عن تسجيل هذه الدفعة وإعادتها إلى المتبقي؟');">
+          <button type="submit" class="btn btn-sm btn-danger">رجوع</button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
   </table>

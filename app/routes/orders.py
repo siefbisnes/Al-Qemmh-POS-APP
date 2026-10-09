@@ -104,7 +104,7 @@ def revert_to_shipping(order_id):
 def not_delivered(order_id):
     try:
         order_service.mark_not_delivered(order_id)
-        flash("تم تسجيل الاوردر كـ لم يصل.", "success")
+        flash("تم تسجيل تعذر التسليم.", "success")
     except order_service.OrderError as e:
         flash(str(e), "error")
     return redirect(url_for("orders.detail", order_id=order_id))
@@ -114,7 +114,7 @@ def not_delivered(order_id):
 def cancel(order_id):
     try:
         order_service.cancel_order(order_id)
-        flash("تم إلغاء الاوردر.", "success")
+        flash("تم إلغاء الطلب قبل التسليم.", "success")
     except order_service.OrderError as e:
         flash(str(e), "error")
     return redirect(url_for("orders.detail", order_id=order_id))
@@ -138,26 +138,6 @@ def confirm_payment(order_id):
     except order_service.OrderError as e:
         flash(str(e), "error")
     return redirect(url_for("orders.detail", order_id=order_id))
-
-
-@bp.route("/<int:order_id>/delete", methods=["POST"])
-def delete(order_id):
-    """حذف — wipes the order's transaction entirely, as if it never
-    happened: full stock restore, shipping-cost purchase removed, no
-    special accounting choice. No confirmation popup - the simple
-    browser confirm() on the button is enough, since there's no
-    financial decision to make here (unlike ارجاع below)."""
-    order = order_service.get_order(order_id)
-    if not order:
-        abort(404)
-    try:
-        order_service.cleanup_before_transaction_delete(order["transaction_id"])
-        sales_service.delete_transaction(order["transaction_id"])
-        flash("تم حذف الاوردر بالكامل وإرجاع الكميات للمخزون.", "success")
-    except ValueError as e:
-        flash(str(e), "error")
-        return redirect(url_for("orders.detail", order_id=order_id))
-    return redirect(url_for("orders.index"))
 
 
 @bp.route("/<int:order_id>/return", methods=["POST"])

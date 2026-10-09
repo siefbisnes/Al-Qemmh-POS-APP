@@ -450,18 +450,21 @@ def delete_transaction(transaction_id):
 
 
 def _normalize_datetime_filter(value, end_of_day=False):
-    """Pads a bare 'YYYY-MM-DD' date into a full timestamp so string
-    comparison against created_at/sale_date (which always carries a
-    time component, even '...T00:00:00' for a custom-picked date)
-    behaves correctly. Without this, 'sale_date <= date_to' with a
-    bare date excludes every sale that happened ON date_to itself,
-    since e.g. '2026-09-05T00:00:00' > '2026-09-05' as plain strings.
-    Same fix already applied in adjustments.py/expenses.py."""
+    """Pads a bare 'YYYY-MM-DD' date into a full T-separated timestamp so
+    string comparison against created_at/sale_date (always written with
+    isoformat()'s 'T' separator, even '...T00:00:00' for a custom-picked
+    date) behaves correctly.
+
+    Without this, 'sale_date <= date_to' with a bare date excludes every
+    sale ON date_to itself ('2026-09-05T00:00:00' > '2026-09-05'). Padding
+    with a space instead of 'T' is equally wrong: 'T' (0x54) sorts after
+    space (0x20), so '...T00:00:00' <= '... 23:59:59' is always false.
+    Same fix as customer_reports._normalize_datetime_filter."""
     if not value or not isinstance(value, str):
         return value
     if len(value) == 10:
-        return value + (" 23:59:59" if end_of_day else " 00:00:00")
-    return value
+        return value + ("T23:59:59" if end_of_day else "T00:00:00")
+    return value.replace(" ", "T", 1)
 
 
 def list_sales(product_id=None, date_from=None, date_to=None, include_voided=False, query=None):

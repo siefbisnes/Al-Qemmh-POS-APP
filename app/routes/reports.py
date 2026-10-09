@@ -230,13 +230,10 @@ def analytics_api():
 
 @bp.route("/analytics/reset/<kpi>", methods=["POST"])
 def reset_analytics_kpi(kpi):
-    """إعادة ضبط for the صافي الربح/المشتريات analytics cards specifically
-    (not the whole Reports page - إعادة ضبط التقارير was removed
-    entirely). See owner_dashboard.py:set_reset_at()/_reset_at() for how
-    this is actually applied - a stored date, not a one-off amount."""
+    """Reset one analytics KPI and its graph without deleting source records."""
     if session.get("role") != "admin":
         abort(403)
-    if kpi not in {"net_profit", "purchases"}:
+    if kpi not in {"net_profit", "purchases", "at_risk"}:
         abort(404)
     owner_service.set_reset_at(kpi)
     flash("تمت إعادة الضبط بنجاح.", "success")

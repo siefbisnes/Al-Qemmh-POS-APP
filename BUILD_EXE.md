@@ -19,6 +19,7 @@ directly on the shop's own Windows computer.
 2. Open Command Prompt in the `al-qemma` folder (type `cmd` in the folder's
    address bar in File Explorer, or `cd` into it manually).
 3. Install everything needed:
+   
    ```
    pip install -r requirements.txt
    ```
@@ -28,6 +29,7 @@ directly on the shop's own Windows computer.
 ## 2. Build the .exe
 
 Run the build script:
+
 ```
 build_exe.bat
 ```
@@ -38,6 +40,7 @@ is missing or if the installer compilation fails; a portable EXE without its
 Setup package is not treated as a successful build.
 
 If you'd rather run the steps yourself instead of the .bat file:
+
 ```
 pyinstaller alqemma.spec
 mkdir dist\AlQemma

@@ -241,13 +241,13 @@ def register_auth_guard(app):
 
         if not session.get("logged_in"):
             session.clear()
-            return redirect(url_for("auth.login"))
+            return redirect(url_for("auth.login"), code=303)
 
         idle_timeout = app.config.get("AUTH_IDLE_TIMEOUT", 2700)
         last_active = session.get("last_active")
         now = int(time.time())
         if last_active is None or now - int(last_active) > idle_timeout:
             session.clear()
-            return redirect(url_for("auth.login"))
+            return redirect(url_for("auth.login"), code=303)
 
         session["last_active"] = now

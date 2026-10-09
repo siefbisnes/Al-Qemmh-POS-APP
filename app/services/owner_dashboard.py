@@ -17,7 +17,7 @@ chart (single stacked bar) instead of two separate charts.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from collections import OrderedDict
 
 from app.db import db_cursor
@@ -34,11 +34,11 @@ STAGNANT_DAYS = 60
 
 
 def _reset_at(kpi):
-    """Returns the stored reset point for 'net_profit' or 'purchases'
+    """Returns the stored reset point for an analytics KPI.
     (settings key kpi_reset_<kpi>_at), or None if never reset.
 
     This replaces the old flat +/- manual-adjustment approach for these
-    two KPIs specifically: a fixed amount only cancelled out correctly
+    KPIs: a fixed amount only cancelled out correctly
     for the exact date window you were viewing when you added it -
     weekly/monthly/6-months/yearly each have a different real total, so
     subtracting the SAME flat amount from all of them left every window
@@ -48,13 +48,47 @@ def _reset_at(kpi):
     timeframe you're looking at.
     """
     from app.services import settings as settings_service
-    return settings_service.get(f"kpi_reset_{kpi}_at")
+    utc_value = settings_service.get(f"kpi_reset_{kpi}_at_utc")
+    if utc_value:
+        return utc_value
+    legacy_value = settings_service.get(f"kpi_reset_{kpi}_at")
+    if not legacy_value:
+        return None
+    return datetime.fromisoformat(legacy_value).astimezone(timezone.utc).replace(
+        tzinfo=None
+    ).isoformat(sep=" ", timespec="seconds")
 
 
 def set_reset_at(kpi):
-    """Sets kpi ('net_profit' | 'purchases') reset point to now."""
-    from app.services import settings as settings_service
-    settings_service.set(f"kpi_reset_{kpi}_at", datetime.now().isoformat(sep=" ", timespec="seconds"))
+    """Reset an analytics KPI and store inventory baselines where needed."""
+    now_local = datetime.now().isoformat(sep=" ", timespec="seconds")
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(sep=" ", timespec="seconds")
+    values = {
+        f"kpi_reset_{kpi}_at": now_local,
+        f"kpi_reset_{kpi}_at_utc": now_utc,
+        f"kpi_reset_{kpi}_bucket_date": date.today().isoformat(),
+    }
+
+    if kpi == "purchases":
+        with db_cursor() as cur:
+            row = cur.execute(
+                """SELECT COALESCE(SUM(quantity * selling_price), 0) AS expected,
+                          COALESCE(SUM(purchase_price), 0) AS product_value
+                   FROM products
+                   WHERE is_active = 1 AND COALESCE(source, '') <> 'service_placeholder'"""
+            ).fetchone()
+        values["kpi_reset_purchases_expected_baseline"] = row["expected"]
+        values["kpi_reset_purchases_products_baseline"] = row["product_value"]
+    elif kpi == "at_risk":
+        values["kpi_reset_at_risk_stagnant_baseline"] = stagnant_and_damaged()["stagnant_value"]
+
+    with db_cursor(commit=True) as cur:
+        for key, value in values.items():
+            cur.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(value)),
+            )
 
 
 def _effective_from(date_from, kpi):
@@ -75,7 +109,19 @@ def _after_reset(bucket_key, kpi):
     reset_at = _reset_at(kpi)
     if not reset_at:
         return True
-    return bucket_key >= reset_at[: len(bucket_key)]
+    from app.services import settings as settings_service
+    bucket_date = settings_service.get(
+        f"kpi_reset_{kpi}_bucket_date", reset_at[:10]
+    )
+    return bucket_key >= bucket_date[: len(bucket_key)]
+
+
+def _reset_baseline(key):
+    from app.services import settings as settings_service
+    try:
+        return float(settings_service.get(key, 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _parse_timeframe(timeframe: str) -> dict:
@@ -141,7 +187,7 @@ def _label_for_bucket(key: str, bucket: str) -> str:
     return key
 
 
-def _sum_sales_by_bucket(date_from, date_to, bucket):
+def _sum_sales_by_bucket(date_from, date_to, bucket, created_from=None):
     """Returns {bucket: {revenue, cogs, units}}."""
     data = {}
     # Delivery-order sales whose money hasn't been financially recognized
@@ -157,8 +203,12 @@ def _sum_sales_by_bucket(date_from, date_to, bucket):
         WHERE s.is_voided = 0 AND s.sale_date >= ? AND s.sale_date <= ?
           AND {order_service.pending_order_sql_exclusion("s")}
     """
+    params = [date_from, date_to]
+    if created_from:
+        query += " AND s.created_at >= ?"
+        params.append(created_from)
     with db_cursor() as cur:
-        rows = cur.execute(query, (date_from, date_to)).fetchall()
+        rows = cur.execute(query, params).fetchall()
     for r in rows:
         key = _bucket_key(r["sale_date"], bucket)
         cell = data.setdefault(key, {"revenue": 0.0, "cogs": 0.0, "units": 0})
@@ -191,34 +241,33 @@ def profit_revenue_series(date_from, date_to, bucket):
     client-requested spread; see
     docs/spoilage_management_requirements.md).
 
-    Manual "صافي الربح" adjustments (the reset-to-zero mechanism on the
-    A صافي الربح reset (see _reset_at()/set_reset_at() above) zeroes the
-    Net Profit line for every bucket before the reset point, while the
-    Revenue line stays a real, unmodified read of actual sales history -
-    only profit resets, not revenue itself. An earlier version folded a
-    flat manual-adjustment amount into whichever single bucket it was
-    added on, which just moved the discrepancy around instead of fixing
-    it (a fixed amount doesn't scale to match each different bucket/
-    window's real total) - this compares an absolute date instead, so it
-    behaves the same regardless of which bucket or timeframe is viewed.
+    Both plotted series start at the reset point: earlier activity is
+    excluded from the revenue and net-profit lines, while activity after
+    the reset continues to appear in its matching bucket.
     """
     from app.services import writeoffs as writeoff_service
 
-    sales = _sum_sales_by_bucket(date_from, date_to, bucket)
-    expenses = _sum_table_by_bucket("expenses", "expense_date", "amount", date_from, date_to, bucket)
+    reset_at = _reset_at("net_profit")
+    sales_from = _reset_at("net_profit")
+    expenses_from = _effective_from(date_from, "net_profit")
+    sales = _sum_sales_by_bucket(date_from, date_to, bucket, created_from=sales_from)
+    expenses = _sum_table_by_bucket("expenses", "expense_date", "amount", expenses_from, date_to, bucket)
     writeoff_costs = writeoff_service.amortization_by_bucket(date_from, date_to, bucket)
     buckets = _empty_buckets(date_from, date_to, bucket)
 
     labels, revenue, net_profit = [], [], []
     for key in buckets:
         cell = sales.get(key, {})
-        rev = cell.get("revenue", 0.0)
         if _after_reset(key, "net_profit"):
+            rev = cell.get("revenue", 0.0)
             cogs = cell.get("cogs", 0.0)
             exp = expenses.get(key, 0.0)
             wo = writeoff_costs.get(key, 0.0)
+            if reset_at and key[:7] <= reset_at[:7]:
+                wo = 0.0
             profit = rev - cogs - exp - wo
         else:
+            rev = 0.0
             profit = 0.0
         labels.append(_label_for_bucket(key, bucket))
         revenue.append(round(rev, 2))
@@ -286,13 +335,12 @@ def purchases_vs_expected(date_from, date_to, bucket):
         recorded in the purchases table per bucket, for the selected
         period.
 
-    A المشتريات reset (see _reset_at()/set_reset_at() above) zeroes the
-    المباع bar for every bucket before the reset point - same reasoning
-    as profit_revenue_series() above. Expected Returns (a live inventory
-    snapshot, unrelated to purchases) is untouched by this.
+    The purchases reset excludes earlier purchases and shows inventory
+    value as the change from the snapshot captured at reset time.
     """
     buckets = _empty_buckets(date_from, date_to, bucket)
-    recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", date_from, date_to, bucket)
+    purchases_from = _effective_from(date_from, "purchases")
+    recorded = _sum_table_by_bucket("purchases", "purchase_date", "cost", purchases_from, date_to, bucket)
 
     bucket_keys = list(buckets.keys())
     expected_by_bucket = _expected_returns_by_bucket(date_from, date_to, bucket, bucket_keys)
@@ -303,7 +351,8 @@ def purchases_vs_expected(date_from, date_to, bucket):
             {
                 "label": "القيمة المتوقعة / Expected Returns",
                 "data": [
-                    round(expected_by_bucket[k], 2) if expected_by_bucket[k] is not None else None
+                    round(expected_by_bucket[k] - _reset_baseline("kpi_reset_purchases_expected_baseline"), 2)
+                    if expected_by_bucket[k] is not None and _after_reset(k, "purchases") else 0.0
                     for k in bucket_keys
                 ],
                 "backgroundColor": "rgba(52, 211, 153, 0.75)",
@@ -335,7 +384,9 @@ def products_value_chart():
                FROM products
                WHERE is_active = 1 AND COALESCE(source, '') <> 'service_placeholder'"""
         ).fetchone()
-    total = round(float(row["total"] or 0), 2)
+    total = round(float(row["total"] or 0) - _reset_baseline("kpi_reset_purchases_products_baseline"), 2)
+    if not _after_reset(date.today().isoformat(), "purchases"):
+        total = 0.0
     return {
         "labels": ["قيمة المنتجات"],
         "datasets": [
@@ -440,6 +491,40 @@ def stagnant_and_damaged(date_from=None, date_to=None):
     }
 
 
+def _apply_at_risk_reset(stock, date_from=None, date_to=None):
+    reset_at = _reset_at("at_risk")
+    if not reset_at:
+        return stock
+
+    effective_from = reset_at
+    if date_from and date_from[:10] > reset_at[:10]:
+        effective_from = date_from[:10] + " 00:00:00"
+    stagnant_value = max(
+        float(stock["stagnant_value"] or 0) - _reset_baseline("kpi_reset_at_risk_stagnant_baseline"),
+        0.0,
+    )
+    damaged_query = "SELECT COALESCE(SUM(cost_loss), 0) AS cost_loss FROM stock_writeoffs WHERE created_at >= ?"
+    damaged_params = [effective_from]
+    if date_from:
+        damaged_query += " AND writeoff_date >= ?"
+        damaged_params.append(date_from)
+    if date_to:
+        damaged_query += " AND writeoff_date <= ?"
+        damaged_params.append(date_to)
+    with db_cursor() as cur:
+        damaged_value = cur.execute(damaged_query, damaged_params).fetchone()["cost_loss"]
+    result = dict(stock)
+    result["stagnant_value"] = round(stagnant_value, 2)
+    result["damaged_value"] = round(float(damaged_value or 0), 2)
+    result["total_at_risk_value"] = round(result["stagnant_value"] + result["damaged_value"], 2)
+    chart = dict(stock["combined_chart"])
+    chart["datasets"] = [dict(dataset) for dataset in chart["datasets"]]
+    chart["datasets"][0]["data"] = [result["stagnant_value"]]
+    chart["datasets"][1]["data"] = [result["damaged_value"]]
+    result["combined_chart"] = chart
+    return result
+
+
 def kpis(date_from, date_to):
     """KPI strip — Net Profit calculation with customer debt handling.
 
@@ -472,18 +557,26 @@ def kpis(date_from, date_to):
         SELECT
             t.id AS transaction_id,
             SUM(s.quantity * s.selling_price) AS total_sale_amount,
-            COALESCE(SUM(sp.amount), 0) AS paid_amount,
+            COALESCE((
+                SELECT SUM(sp.amount)
+                FROM sale_payments sp
+                WHERE sp.transaction_id = t.id
+            ), 0) AS paid_amount,
             SUM(s.quantity * p.purchase_price) AS total_cogs
         FROM transactions t
         JOIN sales s ON s.transaction_id = t.id
         JOIN products p ON p.id = s.product_id
-        LEFT JOIN sale_payments sp ON sp.transaction_id = t.id
         WHERE s.is_voided = 0 AND s.sale_date >= ? AND s.sale_date <= ?
-        GROUP BY t.id
     """
 
+    realized_params = [date_from, date_to]
+    reset_at = _reset_at("net_profit")
+    if reset_at:
+        realized_query += " AND s.created_at >= ?"
+        realized_params.append(reset_at)
+    realized_query += " GROUP BY t.id"
     with db_cursor() as cur:
-        for row in cur.execute(realized_query, (profit_from, date_to)).fetchall():
+        for row in cur.execute(realized_query, realized_params).fetchall():
             total_sale = float(row["total_sale_amount"] or 0)
             paid = float(row["paid_amount"] or 0)
             total_cogs_for_tx = float(row["total_cogs"] or 0)
@@ -526,7 +619,13 @@ def kpis(date_from, date_to):
     # cost still drives the "at-risk liquidity" KPI below (stock_and_damaged/
     # stagnant_and_damaged), which answers a different question (how much
     # capital is tied up in damaged stock right now).
-    writeoff_cost = writeoff_service.amortized_total(date_from=profit_from, date_to=date_to)
+    amortized_from = profit_from
+    reset_at = _reset_at("net_profit")
+    if reset_at:
+        reset_year, reset_month = map(int, reset_at[:7].split("-"))
+        next_month = f"{reset_year + (reset_month == 12):04d}-{1 if reset_month == 12 else reset_month + 1:02d}"
+        amortized_from = max(amortized_from, next_month)
+    writeoff_cost = writeoff_service.amortized_total(date_from=amortized_from, date_to=date_to)
     # Only revenue_loss (never amortized - it's informational, not a P&L
     # deduction) is still read from the full, un-amortized totals().
     wo = writeoff_service.totals(date_from=date_from, date_to=date_to)
@@ -540,7 +639,9 @@ def kpis(date_from, date_to):
     # Outstanding debt
     outstanding_debt = total_revenue - realized_revenue
 
-    stock = stagnant_and_damaged(date_from=date_from, date_to=date_to)
+    stock = _apply_at_risk_reset(
+        stagnant_and_damaged(date_from=date_from, date_to=date_to), date_from, date_to
+    )
 
     return {
         "revenue": round(total_revenue, 2),
@@ -569,7 +670,9 @@ def build_dashboard_payload(timeframe: str = DEFAULT_TIMEFRAME) -> dict:
     date_from, date_to, meta = _range_for(timeframe)
     bucket = meta["bucket"]
 
-    stock = stagnant_and_damaged(date_from=date_from, date_to=date_to)
+    stock = _apply_at_risk_reset(
+        stagnant_and_damaged(date_from=date_from, date_to=date_to), date_from, date_to
+    )
 
     return {
         "timeframe": meta["key"],

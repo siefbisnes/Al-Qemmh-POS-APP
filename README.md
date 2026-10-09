@@ -1,8 +1,32 @@
 # Al-Qemma POS
 
-Al-Qemma is a local-first point-of-sale and shop-management application for inventory, sales, purchases, customers, warranties, expenses, reporting, and product compatibility. It is implemented as a Flask web application and can be run directly with Python or packaged as a Windows desktop executable.
+Al-Qemma POS is a local-first point-of-sale and shop-management application for inventory, sales, purchases, customers, warranties, expenses, reporting, and product compatibility. It is built with Python and Flask, uses SQLite for its database, and provides a web interface that can also be opened in a Windows desktop window through PyWebView. It can be run from source or packaged as a Windows application.
 
-The application is designed for a shop computer. The server, browser UI, database, uploaded product images, generated reports, and operational data live together on the local machine.
+The application is designed to run on a shop's main computer, where its server and business data live. **Tailscale provides private remote access:** when Tailscale is installed and signed in on both the shop computer and the device accessing it, using the same Tailscale account, the interface can be reached from practically anywhere with an internet connection—without exposing the application as a public website. The shop computer must be powered on, connected to Tailscale, and running Al-Qemma.
+
+## Technology stack
+
+- **Python** — application logic and backend
+- **Flask** — web server, routes, and request handling
+- **SQLite** — local business database
+- **HTML, CSS, and JavaScript** — browser-based user interface
+- **Jinja2** — server-rendered HTML templates
+- **PyWebView** — desktop window for the web interface
+- **Tailscale** — private connectivity between the shop computer and authorized devices
+- **Playwright + Chromium** — browser-based PDF generation
+- **PyInstaller** — packaging the Python application for Windows
+- **Inno Setup** — Windows installer creation (for installer builds)
+
+## Remote access with Tailscale
+
+Tailscale is an intentional deployment choice for accessing Al-Qemma remotely while keeping it off the public internet.
+
+1. Install Tailscale on the computer running Al-Qemma and on each device that needs access.
+2. Sign in to the **same Tailscale account** on both devices.
+3. Keep the shop computer powered on, connected to Tailscale, and running the Al-Qemma server.
+4. Open Al-Qemma on the other device using the shop computer's Tailscale IP address or MagicDNS hostname and the configured application port.
+
+This means the owner can access the shop interface while away from the shop, as long as both devices have an internet connection and Tailscale is connected. **Tailscale does not host the application or start its server**; it creates the private network path between devices. The application must be configured to listen on an interface reachable through Tailscale—not only `127.0.0.1`—for remote devices to connect. Keep access limited to trusted devices and protect the account and shop data.
 
 ## Capabilities
 
@@ -39,7 +63,7 @@ playwright install chromium
 python run.py
 ```
 
-Open the URL printed by the process, normally `http://127.0.0.1:5000`.
+Open the URL printed by the process, normally `http://127.0.0.1:5000` for access on that same computer. For remote access over Tailscale, use the shop computer's Tailscale IP address or MagicDNS hostname with the configured port, and ensure the server listens on a Tailscale-reachable interface.
 
 ### Windows from source
 
@@ -68,20 +92,20 @@ The output is placed under `dist\AlQemma\`. Copy the complete folder, not only t
 
 ## Project map
 
-| Path | Responsibility |
-| --- | --- |
-| `run.py` | Main development/server entry point |
-| `desktop_launcher.py` | Starts the local server and opens the desktop browser window |
-| `config.py` | Application configuration and filesystem locations |
-| `app/__init__.py` | Flask application factory, blueprint registration, hooks, and error handling |
-| `app/db.py` | Database connection and schema initialization helpers |
-| `app/routes/` | HTTP routes, form handling, page rendering, and access checks |
-| `app/services/` | Business rules, queries, calculations, reports, and file operations |
-| `app/templates/` | Jinja HTML templates |
-| `app/static/` | CSS, JavaScript, fonts, icons, images, manifest, and service worker |
-| `schema.sql` | Database schema and indexes |
-| `instance/` | Local database, uploads, temporary files, and launcher settings; do not commit it |
-| `alqemma.spec` and `build_exe.bat` | PyInstaller packaging |
+| Path                               | Responsibility                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| `run.py`                           | Main development/server entry point                                               |
+| `desktop_launcher.py`              | Starts the local server and opens the interface in a PyWebView desktop window     |
+| `config.py`                        | Application configuration and filesystem locations                                |
+| `app/__init__.py`                  | Flask application factory, blueprint registration, hooks, and error handling      |
+| `app/db.py`                        | Database connection and schema initialization helpers                             |
+| `app/routes/`                      | HTTP routes, form handling, page rendering, and access checks                     |
+| `app/services/`                    | Business rules, queries, calculations, reports, and file operations               |
+| `app/templates/`                   | Jinja HTML templates                                                              |
+| `app/static/`                      | CSS, JavaScript, fonts, icons, images, manifest, and service worker               |
+| `schema.sql`                       | Database schema and indexes                                                       |
+| `instance/`                        | Local database, uploads, temporary files, and launcher settings; do not commit it |
+| `alqemma.spec` and `build_exe.bat` | PyInstaller packaging                                                             |
 
 ## Documentation
 
@@ -99,8 +123,9 @@ The repository currently has no committed automated test suite. `package.json` c
 
 ## Security and data notes
 
-- This is a local shop application, not a hardened multi-tenant internet service.
-- Keep the server bound to the local machine unless the deployment has been deliberately secured for a private network.
+- This is a local shop application, not a hardened multi-tenant internet service or a publicly hosted website.
+- Tailscale provides private device-to-device connectivity; it does not replace application security. Only connect trusted devices, and configure the server to listen on the appropriate Tailscale-reachable interface when remote access is needed.
+- Do not expose the application port directly to the public internet.
 - Treat `instance/` and any generated backups as sensitive: they contain business and customer data.
 - Do not commit credentials, databases, uploaded images, generated PDFs, or launcher settings.
 - Use the application’s backup workflow and periodically copy backups to a separate, protected location.

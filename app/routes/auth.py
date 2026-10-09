@@ -5,11 +5,20 @@ from app.services import settings as settings_service
 bp = Blueprint("auth", __name__)
 
 
+def _redirect_after_login():
+    # 303 See Other forces the follow-up request to GET. A 302 after POST
+    # is allowed to replay POST on the next URL; WebView2 does that
+    # intermittently, and /about only accepts GET → "Method Not Allowed".
+    return redirect(url_for("branding.about"), code=303)
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
-    session.clear()
+    if request.method == "GET" and session.get("logged_in"):
+        return _redirect_after_login()
 
     if request.method == "POST":
+        session.clear()
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         expected_user = current_app.config.get("AUTH_USERNAME", "user")
@@ -39,7 +48,7 @@ def login():
                 # Welcome page first (has clear "لوحة المالك" CTA). Owner dash
                 # stays reachable from nav / about — avoids a blank-looking
                 # analytics page if Chart.js / scroll-reveal JS fails.
-                return redirect(url_for("branding.about"))
+                return _redirect_after_login()
 
         if username == expected_user:
             stored_hash = settings_service.get("auth_password_hash")
@@ -54,7 +63,7 @@ def login():
                 session["last_active"] = __import__("time").time()
                 session["login_time"] = session["last_active"]
                 session.permanent = False
-                return redirect(url_for("branding.about"))
+                return _redirect_after_login()
 
         flash("اسم المستخدم أو كلمة المرور غير صحيحة.", "error")
 
